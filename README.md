@@ -11,7 +11,7 @@
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ## Live Demo
-🔗 [Live App](YOUR_RENDER_URL) | 📊 [API Docs](YOUR_RENDER_URL/docs)
+🔗 [Live App](https://finmind-ai.streamlit.app/) 
 
 ---
 
