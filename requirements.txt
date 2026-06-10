@@ -1,0 +1,51 @@
+# ── Core ──────────────────────────────────────────────────────────
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+lightgbm
+imbalanced-learn
+shap
+optuna
+joblib
+
+# ── API & Backend ─────────────────────────────────────────────────
+fastapi
+uvicorn
+pydantic
+python-dotenv
+sqlalchemy
+
+# ── Auth ──────────────────────────────────────────────────────────
+passlib[bcrypt]
+python-jose[cryptography]
+bcrypt
+
+# ── Frontend ──────────────────────────────────────────────────────
+streamlit
+plotly
+
+# ── LLM / AI ─────────────────────────────────────────────────────
+groq
+
+# ── RAG — vector search ───────────────────────────────────────────
+chromadb
+sentence-transformers
+
+# ── Anomaly detection / Forecasting ──────────────────────────────
+# scikit-learn already covers IsolationForest
+python-dateutil          # relativedelta for forecast month arithmetic
+# prophet                # uncomment for production-grade time-series forecast
+#   requires: pip install prophet (heavy — ~500 MB, use only if needed)
+
+# ── Model serving ─────────────────────────────────────────────────
+gdown                    # Google Drive model download
+
+# ── Dev / Testing ─────────────────────────────────────────────────
+pytest
+pytest-cov
+httpx                    # required by FastAPI TestClient
+
+# ── Jupyter (training notebooks) ─────────────────────────────────
+jupyter

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: finmind-ai-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python setup_db.py
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false          # set manually in Render dashboard
+      - key: SECRET_KEY
+        generateValue: true  # Render auto-generates a secure value
+      - key: DATABASE_URL
+        fromDatabase:
+          name: finmind-db
+          property: connectionString
+
+databases:
+  - name: finmind-db
+    plan: free               # Render free-tier PostgreSQL (90-day limit, then $7/mo)
