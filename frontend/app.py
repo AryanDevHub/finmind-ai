@@ -631,7 +631,7 @@ if "Dashboard" in page:
         fillcolor='rgba(59,130,246,0.07)',
         hovertemplate="<b>%{x}</b><br>₹%{y:,.0f}<extra></extra>"
     ))
-    fig3.update_layout(**PLOTLY_LAYOUT, height=160, margin=dict(l=10,r=10,t=10,b=10))
+    fig3.update_layout(**{k:v for k,v in PLOTLY_LAYOUT.items() if k != 'margin'}, height=160, margin=dict(l=10,r=10,t=10,b=10))
     st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
 
     # ── Recent transactions ──
