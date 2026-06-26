@@ -58,6 +58,7 @@ hr { border-color: rgba(99,179,237,0.08) !important; margin: 1.5rem 0 !important
 .fm-sidebar-brand { padding: 20px 0 16px; text-align: center; }
 .fm-budget-track { background: #1A2535; border-radius: 6px; height: 7px; margin: 10px 0 6px; overflow: hidden; }
 .fm-budget-fill { height: 100%; border-radius: 6px; }
+div[data-testid="stExpander"] summary { color: #F87171 !important; font-size: 13px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -81,7 +82,7 @@ def get_engine():
 engine = get_engine()
 
 # ─── ML Model ────────────────────────────────────────────────────
-ML_DIR    = "ml_models"
+ML_DIR        = "ml_models"
 MODEL_PATH    = os.path.join(ML_DIR, "fraud_model.pkl")
 FEATURES_PATH = os.path.join(ML_DIR, "feature_names.json")
 
@@ -94,7 +95,7 @@ def load_model():
                 "https://drive.google.com/uc?id=1_fPbrEuniakS3a0wt8-k3Mx72o7QVLSi",
                 MODEL_PATH, quiet=True
             )
-    model    = joblib.load(MODEL_PATH)
+    model = joblib.load(MODEL_PATH)
     with open(FEATURES_PATH) as f:
         features = json.load(f)
     return model, features
@@ -166,13 +167,36 @@ def add_transaction_db(user_id, description, amount, category, tx_type,
             "cat": category, "ttype": tx_type, "fs": fraud_score,
             "rl": risk_level, "flag": is_flagged, "date": datetime.utcnow()
         })
-        # update budget
         if tx_type == "expense":
             month = datetime.now().strftime("%Y-%m")
             conn.execute(text("""
                 UPDATE budgets SET spent_amount = spent_amount + :amt
                 WHERE user_id=:uid AND category=:cat AND month=:month
             """), {"amt": amount, "uid": user_id, "cat": category, "month": month})
+        conn.commit()
+
+def delete_transaction_db(tx_id: int):
+    """Delete a single transaction and roll back its effect on the budget."""
+    with engine.connect() as conn:
+        tx = conn.execute(text(
+            "SELECT amount, category, transaction_type FROM transactions WHERE id=:id"
+        ), {"id": tx_id}).fetchone()
+
+        conn.execute(text("DELETE FROM transactions WHERE id=:id"), {"id": tx_id})
+
+        if tx and tx[2] == "expense":
+            month = datetime.now().strftime("%Y-%m")
+            conn.execute(text("""
+                UPDATE budgets SET spent_amount = GREATEST(spent_amount - :amt, 0)
+                WHERE user_id=:uid AND category=:cat AND month=:month
+            """), {"amt": tx[0], "uid": st.session_state.user_id, "cat": tx[1], "month": month})
+        conn.commit()
+
+def reset_all_data(user_id: int = 1):
+    """Delete all transactions and zero out all budget spend for this user."""
+    with engine.connect() as conn:
+        conn.execute(text("DELETE FROM transactions WHERE user_id=:uid"), {"uid": user_id})
+        conn.execute(text("UPDATE budgets SET spent_amount=0 WHERE user_id=:uid"), {"uid": user_id})
         conn.commit()
 
 def set_budget_db(user_id, category, limit_amount):
@@ -263,6 +287,38 @@ def budget_bar_color(pct):
     if pct > 70: return "linear-gradient(90deg,#F59E0B,#FCD34D)"
     return "linear-gradient(90deg,#3B82F6,#60A5FA)"
 
+def render_transaction_row(tx):
+    """Renders one transaction row with an inline delete button."""
+    icon      = CAT_ICONS.get(tx['category'], "📦")
+    is_fraud  = tx.get('is_flagged', False)
+    amt_color = "#F87171" if tx['transaction_type']=='expense' else "#34D399"
+    amt_sign  = "-" if tx['transaction_type']=='expense' else "+"
+    icon_bg   = "rgba(239,68,68,0.12)" if is_fraud else "rgba(59,130,246,0.1)"
+    badge     = risk_badge(tx.get('risk_level','LOW'))
+
+    col_tx, col_del = st.columns([12, 1])
+    with col_tx:
+        st.markdown(f"""
+        <div class="fm-tx-row">
+            <div class="fm-tx-icon" style="background:{icon_bg};">{icon}</div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:14px;font-weight:500;color:#C8D8F0;">{tx['description']}</div>
+                <div style="font-size:12px;color:#4A6080;">{tx['category']} · {str(tx['date'])[:10]}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+                <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;color:{amt_color};margin-bottom:4px;">
+                    {amt_sign}₹{tx['amount']:,.0f}
+                </div>
+                {badge}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_del:
+        st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+        if st.button("🗑️", key=f"del_{tx['id']}", help="Delete this transaction"):
+            delete_transaction_db(tx['id'])
+            st.rerun()
+
 # ─── Sidebar ────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
@@ -287,6 +343,16 @@ with st.sidebar:
     status_color = "#10B981" if db_ok else "#EF4444"
     status_text  = "connected" if db_ok else "offline"
     st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#0F1825;border:1px solid rgba(99,179,237,0.1);border-radius:8px;font-size:11px;color:#5A7090;"><span style="width:8px;height:8px;border-radius:50%;background:{status_color};display:inline-block;"></span> <strong style="color:#C8D8F0;">DB</strong> {status_text}</div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("⚠️ Danger zone"):
+        st.caption("This permanently deletes all your transactions and resets budget spend to zero.")
+        confirm = st.checkbox("I understand this cannot be undone")
+        if st.button("🗑️ Reset all data", type="primary", use_container_width=True, disabled=not confirm):
+            reset_all_data(st.session_state.user_id)
+            st.success("All data cleared!")
+            st.rerun()
+
     st.markdown("<br>", unsafe_allow_html=True)
     st.caption("Powered by LightGBM + Groq Llama 3.3 70B")
 
@@ -372,30 +438,10 @@ if "Dashboard" in page:
                        margin=dict(l=10,r=10,t=10,b=10), height=160)
     st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar":False})
 
-    # Recent transactions
+    # Recent transactions — with delete buttons
     st.markdown('<p class="fm-section-label">Recent transactions</p>', unsafe_allow_html=True)
     for tx in txs[:8]:
-        icon      = CAT_ICONS.get(tx['category'],"📦")
-        is_fraud  = tx.get('is_flagged', False)
-        amt_color = "#F87171" if tx['transaction_type']=='expense' else "#34D399"
-        amt_sign  = "-" if tx['transaction_type']=='expense' else "+"
-        icon_bg   = "rgba(239,68,68,0.12)" if is_fraud else "rgba(59,130,246,0.1)"
-        badge     = risk_badge(tx.get('risk_level','LOW'))
-        st.markdown(f"""
-        <div class="fm-tx-row">
-            <div class="fm-tx-icon" style="background:{icon_bg};">{icon}</div>
-            <div style="flex:1;min-width:0;">
-                <div style="font-size:14px;font-weight:500;color:#C8D8F0;">{tx['description']}</div>
-                <div style="font-size:12px;color:#4A6080;">{tx['category']} · {str(tx['date'])[:10]}</div>
-            </div>
-            <div style="text-align:right;flex-shrink:0;">
-                <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;color:{amt_color};margin-bottom:4px;">
-                    {amt_sign}₹{tx['amount']:,.0f}
-                </div>
-                {badge}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        render_transaction_row(tx)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -455,21 +501,7 @@ elif "Add Transaction" in page:
         st.markdown('<p class="fm-section-label">Recent transactions</p>', unsafe_allow_html=True)
         txs = get_transactions()
         for tx in txs[:10]:
-            icon      = CAT_ICONS.get(tx['category'],"📦")
-            amt_color = "#F87171" if tx['transaction_type']=='expense' else "#34D399"
-            amt_sign  = "-" if tx['transaction_type']=='expense' else "+"
-            st.markdown(f"""
-            <div class="fm-tx-row">
-                <div class="fm-tx-icon" style="background:rgba(59,130,246,0.1);">{icon}</div>
-                <div style="flex:1;">
-                    <div style="font-size:13px;font-weight:500;color:#C8D8F0;">{tx['description']}</div>
-                    <div style="font-size:11px;color:#3A5070;">{tx['category']}</div>
-                </div>
-                <div style="font-size:14px;font-weight:600;color:{amt_color};font-family:'Space Grotesk',sans-serif;">
-                    {amt_sign}₹{tx['amount']:,.0f}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            render_transaction_row(tx)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -587,7 +619,7 @@ elif "Fraud" in page:
         st.markdown('<div class="fm-card" style="text-align:center;color:#3A5070;padding:32px;">No transactions yet.</div>', unsafe_allow_html=True)
         st.stop()
 
-    df         = pd.DataFrame(txs)
+    df          = pd.DataFrame(txs)
     df['amount']= df['amount'].astype(float)
     flagged_df  = df[df['is_flagged']==True]
     expense_df  = df[df['transaction_type']=='expense']
@@ -635,8 +667,13 @@ elif "Fraud" in page:
     else:
         for _,tx in flagged_df.iterrows():
             with st.expander(f"🔴 {tx['description']} — ₹{tx['amount']:,.0f} | {tx['risk_level']} | {tx['fraud_score']:.1f}%"):
-                ec1,ec2,ec3 = st.columns(3)
+                ec1,ec2,ec3,ec4 = st.columns(4)
                 ec1.metric("Fraud score", f"{tx['fraud_score']:.1f}%")
                 ec2.metric("Risk level",  tx['risk_level'])
                 ec3.metric("Amount",      f"₹{tx['amount']:,.0f}")
+                with ec4:
+                    st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+                    if st.button("🗑️ Delete", key=f"del_fraud_{tx['id']}", use_container_width=True):
+                        delete_transaction_db(tx['id'])
+                        st.rerun()
                 st.markdown(f'<div style="margin-top:10px;padding:12px;background:rgba(239,68,68,0.06);border-radius:10px;border:1px solid rgba(239,68,68,0.15);font-size:13px;color:#F87171;">⚠️ Flagged by LightGBM fraud model. Review this transaction carefully.</div>', unsafe_allow_html=True)
