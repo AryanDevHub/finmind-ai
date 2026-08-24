@@ -1,59 +1,58 @@
 # FinMind AI
 
-> Personal finance platform with real-time fraud detection, RAG-powered AI advisor, budget tracking, anomaly detection, and spending forecasts.
+> Personal finance platform with JWT-authenticated multi-user accounts, real-time fraud detection, a RAG-powered AI advisor, budget tracking, anomaly detection, and spending forecasts.
 
 ![CI](https://github.com/YOUR_USERNAME/finmind-ai/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Latest-green)
-![LightGBM](https://img.shields.io/badge/LightGBM-0.9588_AUC-orange)
+![LightGBM](https://img.shields.io/badge/LightGBM-0.77_AUC-orange)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-🔗 [Live App](https://finmind-ai.streamlit.app) &nbsp;|&nbsp; 📖 [API Docs](YOUR_RENDER_URL/docs) &nbsp;|&nbsp; 🎬 [Demo Video](#demo)
-
----
-
-![FinMind AI Dashboard](./assets/finmind-demo.gif)
+🔗 [Live App](YOUR_DEPLOYED_URL_HERE) &nbsp;|&nbsp; 📖 [API Docs](YOUR_RENDER_URL/docs)
 
 ---
 
 ## What it does
 
-FinMind AI acts as a personal CFO — it scores every transaction for fraud in real time, tracks budgets, flags anomalies in your spending patterns, and answers financial questions through an AI agent that reads your actual data.
+FinMind AI acts as a personal CFO — it scores every transaction for fraud in real time, tracks budgets, flags anomalies in spending patterns, and answers financial questions through an AI agent that reads your actual data. Every user has their own authenticated account; nobody can see another user's transactions.
 
-Built end-to-end: data → model training → REST API → deployed frontend.
+Built end-to-end: data → model training → REST API → auth → deployed frontend, with a full Docker Compose stack for one-command local setup.
 
 ---
 
 ## Features
 
+### Authentication
+- JWT-based auth (register/login) — passwords hashed with `bcrypt`
+- Every data route is protected; users can only read or write their own data
+- Cross-user access attempts are rejected with `403`, not silently allowed
+
 ### Fraud Detection
-- LightGBM trained on 590,540 transactions from the IEEE-CIS Kaggle dataset
-- **0.9588 AUC-ROC** with SMOTE oversampling for 3.5% class imbalance
-- SHAP explainability — shows exactly which features drove each flag
+- LightGBM classifier trained on the exact features available at transaction time: **amount, category, hour, day-of-week**
+- **0.7702 AUC-ROC** on held-out data, measured on the real inference-time feature set (see [note on training data](#fraud-model-notes) below)
+- SHAP explainability wired in for feature-level fraud attribution
+- SMOTE oversampling to handle class imbalance
 - Risk levels: `LOW` / `MEDIUM` / `HIGH` / `CRITICAL` on every expense
 
 ### RAG-Powered AI Advisor
-- Llama 3.3 70B via Groq API with **tool-calling** (agentic, not just a prompt wrapper)
-- ChromaDB vector store + `all-MiniLM-L6-v2` embeddings for semantic retrieval
-- Retrieves relevant past transactions before answering — personalised to your data
-- Tools the agent can call: `get_financial_summary`, `get_fraud_alerts`, `get_category_breakdown`, `get_budget_status`
+- Llama 3.3 70B via the Groq API with **tool-calling** (agentic — the model calls `get_financial_summary`, `get_fraud_alerts`, `get_category_breakdown`, `get_budget_status` directly)
+- ChromaDB vector store + `all-MiniLM-L6-v2` embeddings for semantic retrieval over past transactions
+- Retrieves relevant transaction history before answering, so responses are grounded in the user's actual data
+- Embedding model is pre-loaded at backend startup, not on the user's first message
 
 ### Anomaly Detection
 - Isolation Forest on each user's own expense history
-- Flags "unusual for you" — not just globally suspicious
-- Separate from the supervised fraud model — catches drift in personal patterns
+- Flags "unusual for you," separate from the supervised fraud model — catches drift in personal spending patterns
 
 ### Spending Forecast
-- Linear trend model per user (Prophet-ready stub)
-- Predicts next month's spend per category from transaction history
+- Linear trend model per user, predicting next month's spend per category
 
 ### Budget Manager
-- Set monthly limits per category
-- Real-time utilisation bars, sorted by highest risk first
-- Auto-deducts spend as transactions are added
+- Set monthly limits per category with real-time utilisation bars, sorted by highest risk first
 
 ### Dashboard
-- Donut chart by category, grouped bar income vs expenses, cumulative savings sparkline
+- Donut chart by category, grouped bar income vs. expenses, cumulative savings sparkline
 - Every transaction row shows fraud score + risk badge inline
 
 ---
@@ -62,35 +61,38 @@ Built end-to-end: data → model training → REST API → deployed frontend.
 
 | Layer | Technology |
 |---|---|
-| Fraud model | LightGBM + SMOTE + SHAP (IEEE-CIS, 590k rows) |
+| Fraud model | LightGBM + SMOTE + SHAP, trained on real inference-time features |
 | Anomaly detection | Isolation Forest (scikit-learn) |
 | LLM + agent | Groq API — Llama 3.3 70B with tool-calling |
 | RAG | ChromaDB + sentence-transformers (all-MiniLM-L6-v2) |
+| Auth | JWT (python-jose) + bcrypt |
 | Backend | FastAPI + SQLAlchemy |
-| Database | PostgreSQL (Render) / SQLite (local dev) |
-| Frontend | Streamlit + Plotly |
-| Testing | pytest + GitHub Actions CI |
+| Database | PostgreSQL (Supabase / Docker) |
+| Frontend | Streamlit + Plotly, communicates with the backend over HTTP |
+| Testing | pytest (32 tests) + GitHub Actions CI |
+| Containerization | Docker + Docker Compose (backend, frontend, Postgres) |
 | Deployment | Render.com |
-| Training | Google Colab (T4 GPU) |
+| Training | LightGBM, trained locally / in Colab |
 
 ---
 
 ## Architecture
 
 ```
-User → Streamlit Frontend
+User → Streamlit Frontend (calls backend over HTTP with a JWT)
            ↓
      FastAPI Backend
+     ├── POST /register, POST /login        → JWT issuance
      ├── POST /transaction/add
-     │     ├── LightGBM fraud score (amount + category + hour)
+     │     ├── LightGBM fraud score (amount + category + hour + day-of-week)
      │     ├── ChromaDB RAG index (sentence-transformers embedding)
-     │     └── PostgreSQL persist
+     │     └── PostgreSQL persist (scoped to current_user)
      ├── POST /chat
      │     ├── ChromaDB semantic retrieval (top-5 relevant transactions)
      │     ├── Groq Llama 3.3 70B — tool-calling agent
      │     └── Tool execution: summary / fraud / categories / budgets
-     ├── GET  /anomaly/{user_id}   → Isolation Forest on user history
-     ├── GET  /forecast/{user_id}  → Linear trend / Prophet forecast
+     ├── GET  /anomaly/{user_id}   → Isolation Forest (ownership-checked)
+     ├── GET  /forecast/{user_id}  → linear trend forecast (ownership-checked)
      ├── GET  /transactions/{user_id}
      └── CRUD /budget/*
 ```
@@ -101,15 +103,49 @@ User → Streamlit Frontend
 
 | Metric | Value |
 |---|---|
-| AUC-ROC | 0.9588 |
-| Training samples | 590,540 |
+| AUC-ROC | **0.7702** |
+| Precision (fraud class) | 0.25 |
+| Recall (fraud class) | 0.677 |
+| Features | `amount`, `category`, `hour`, `day_of_week` |
 | Class imbalance | SMOTE oversampling |
-| Explainability | SHAP values |
+| Explainability | SHAP TreeExplainer |
 | Anomaly detection | Isolation Forest (contamination = 0.10) |
+
+### Fraud model notes
+
+The model is trained on a **synthetic dataset** generated by `ml_models/train_fraud_model.py`, using a documented, rule-based fraud pattern (large amounts, unusual hours, and discretionary categories increase fraud probability, with random noise so the boundary isn't perfectly learnable). This is intentional: earlier versions of this project trained on the real IEEE-CIS Kaggle dataset (0.9588 AUC) but then only had three features actually available at transaction time, so that number described a model that was never the one scoring live transactions. This version trains and evaluates on the exact features the app uses at inference — an honest, smaller number, but one that's actually true of the running system.
+
+To swap in real transaction data, replace `generate_synthetic_data()` in `ml_models/train_fraud_model.py` with a real data loader that produces the same four columns, then rerun the script.
 
 ---
 
-## Installation
+## Running with Docker (recommended)
+
+Spins up Postgres, the FastAPI backend, and the Streamlit frontend together, fully networked and isolated from your host machine.
+
+**Prerequisites:** [Docker Desktop](https://docs.docker.com/get-docker/) (with WSL2 backend on Windows).
+
+```bash
+git clone https://github.com/YOUR_USERNAME/finmind-ai.git
+cd finmind-ai
+
+cp .env.example .env
+# Edit .env — set SECRET_KEY (required) and GROQ_API_KEY (required for chat)
+
+docker compose up --build
+```
+
+Then open:
+- **Frontend:** http://localhost:8501
+- **Backend API docs:** http://localhost:8000/docs
+
+To stop: `docker compose down` (keeps data) or `docker compose down -v` (wipes data, fresh start).
+
+Backend and frontend use separate requirement files (`requirements-backend.txt`, `requirements-frontend.txt`) so the frontend image doesn't pull in ML/RAG dependencies it never uses, and the backend installs CPU-only PyTorch rather than the multi-gigabyte CUDA build.
+
+---
+
+## Running locally (without Docker)
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/finmind-ai.git
@@ -122,7 +158,7 @@ venv\Scripts\activate           # Windows
 pip install -r requirements.txt
 
 cp .env.example .env
-# Add GROQ_API_KEY to .env
+# Add SECRET_KEY, GROQ_API_KEY, DATABASE_URL (SQLite default is fine locally)
 
 python setup_db.py
 
@@ -138,7 +174,7 @@ streamlit run frontend/app.py           # terminal 2
 pytest tests/ -v
 ```
 
-8 tests covering fraud scoring, budget CRUD, anomaly detection, and the forecast endpoint. CI runs on every push via GitHub Actions.
+32 tests covering auth (register/login/cross-user access rejection), fraud scoring across all risk tiers, budget CRUD, anomaly detection, and the forecast endpoint. CI runs on every push via GitHub Actions.
 
 ---
 
@@ -146,32 +182,22 @@ pytest tests/ -v
 
 | Variable | Required | Description |
 |---|---|---|
-| `GROQ_API_KEY` | Yes | From [console.groq.com](https://console.groq.com) — free tier available |
-| `DATABASE_URL` | No | Postgres connection string. Defaults to local SQLite if unset. |
-| `SECRET_KEY` | No | JWT secret. Auto-generated on Render. |
-
----
-
-## Deployment (Render)
-
-The `render.yaml` in this repo provisions everything automatically:
-- Python web service running `uvicorn`
-- Free-tier PostgreSQL database linked via `DATABASE_URL`
-- `GROQ_API_KEY` set manually in the Render dashboard
-
-Push to `main` → Render redeploys automatically.
+| `SECRET_KEY` | Yes | JWT signing secret. Generate with `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `GROQ_API_KEY` | Yes (for chat) | From [console.groq.com](https://console.groq.com) — free tier available |
+| `DATABASE_URL` | No | Postgres connection string. Defaults to local SQLite if unset. Ignored by Docker Compose, which sets its own. |
+| `POSTGRES_PASSWORD` | No | Only used by `docker compose up`. Defaults to a dev password. |
 
 ---
 
 ## Dataset
 
-IEEE-CIS Fraud Detection ([Kaggle](https://www.kaggle.com/c/ieee-fraud-detection)) — 590,540 transactions, 394 features, 3.5% fraud rate.
+The fraud model is trained on synthetic data with a documented generation rule — see [Fraud model notes](#fraud-model-notes) above. Anomaly detection and forecasting run on each user's own real transaction history.
 
 ---
 
 ## Resume Bullet
 
-> Built FinMind AI — end-to-end AI finance platform with LightGBM fraud detection (0.9588 AUC, 590k transactions), RAG-powered Llama 3.3 70B agent (ChromaDB + tool-calling), Isolation Forest anomaly detection, and spending forecasts. FastAPI + PostgreSQL backend, Streamlit frontend, deployed on Render with CI via GitHub Actions.
+> Built FinMind AI — full-stack, multi-user finance platform with JWT authentication, a LightGBM fraud classifier (0.77 AUC on real inference-time features), a RAG-powered Llama 3.3 70B advisor (ChromaDB + tool-calling), Isolation Forest anomaly detection, and spending forecasts. FastAPI + PostgreSQL backend, Streamlit frontend communicating over a REST API, fully containerized with Docker Compose, 32-test pytest suite with CI via GitHub Actions.
 
 ---
 

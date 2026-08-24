@@ -3,17 +3,30 @@ pandas
 numpy
 scikit-learn
 lightgbm
+imbalanced-learn
+shap
 joblib
-gdown
 
 # ── Database ──────────────────────────────────────────────────────
 sqlalchemy
 psycopg2-binary
 python-dotenv
 
+# ── Auth ──────────────────────────────────────────────────────────
+python-jose[cryptography]
+bcrypt
+python-multipart
+email-validator
+
 # ── Frontend ──────────────────────────────────────────────────────
 streamlit
 plotly
+requests
 
 # ── LLM ──────────────────────────────────────────────────────────
 groq
+
+# ── RAG (semantic retrieval for the AI advisor) ────────────────────
+chromadb
+sentence-transformers
+protobuf>=4.25.3,<5

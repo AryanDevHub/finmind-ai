@@ -1,0 +1,14 @@
+{
+  "auc_roc": 0.7702,
+  "n_train_samples": 85332,
+  "n_test_samples": 12000,
+  "features": [
+    "amount",
+    "category_enc",
+    "hour",
+    "day_of_week"
+  ],
+  "data_source": "synthetic (documented rule-based generator, see generate_synthetic_data())",
+  "precision_fraud_class": 0.25,
+  "recall_fraud_class": 0.677
+}

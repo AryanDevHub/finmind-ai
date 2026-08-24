@@ -1,0 +1,31 @@
+# ── Core ML ───────────────────────────────────────────────────────
+pandas
+numpy
+scikit-learn
+lightgbm
+imbalanced-learn
+shap
+joblib
+
+# ── Database ──────────────────────────────────────────────────────
+sqlalchemy
+psycopg2-binary
+python-dotenv
+
+# ── Auth ──────────────────────────────────────────────────────────
+python-jose[cryptography]
+bcrypt
+python-multipart
+email-validator
+
+# ── Backend framework ───────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+
+# ── LLM ──────────────────────────────────────────────────────────
+groq
+
+# ── RAG (semantic retrieval for the AI advisor) ────────────────────
+chromadb
+sentence-transformers
+protobuf>=4.25.3,<5
