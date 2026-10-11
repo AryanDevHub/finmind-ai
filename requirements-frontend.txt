@@ -1,6 +1,5 @@
 # ── Frontend ──────────────────────────────────────────────────────
-streamlit
-plotly
-requests
-python-dotenv
-protobuf>=4.25.3,<5
+streamlit>=1.50
+plotly>=5.20
+requests>=2.31
+python-dotenv>=1.0

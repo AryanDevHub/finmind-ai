@@ -4,33 +4,38 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: finmind
+          POSTGRES_PASSWORD: finmind_dev_password
+          POSTGRES_DB: finmind
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U finmind" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://finmind:finmind_dev_password@localhost:5432/finmind_test
+      TEST_REDIS_URL: redis://localhost:6379/15
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
-      - name: Install dependencies
+          cache-dependency-path: requirements-*.txt
+      - name: Install dependencies (CPU-only torch first)
         run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov httpx fastapi uvicorn sqlalchemy
-
-      - name: Run tests
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          DATABASE_URL: "sqlite:///./test.db"
-        run: pytest tests/ -v --tb=short
-
-      - name: Upload coverage (optional)
-        if: always()
-        run: pytest tests/ --cov=backend --cov-report=term-missing || true
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-dev.txt
+      - name: Test (needs ml_models/*.onnx committed; model tests are skipped if absent)
+        run: pytest -v --tb=short

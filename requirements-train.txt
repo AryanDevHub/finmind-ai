@@ -1,0 +1,3 @@
+# Only needed to (re)train the fraud model: python ml_models/train_fraud_model.py
+-r requirements-backend.txt
+onnxmltools>=1.12

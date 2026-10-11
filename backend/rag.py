@@ -1,137 +1,79 @@
 """
-rag.py — Retrieval-Augmented Generation for FinMind AI
-Stores every transaction as a vector embedding in ChromaDB.
-At chat time, retrieves the most semantically relevant past
-transactions and injects them into the LLM prompt context.
+rag.py — semantic retrieval over transactions, in the SAME Postgres (pgvector).
 
-Install:
-    pip install chromadb sentence-transformers
+Replaces the embedded ChromaDB client (SQLite file locks that corrupt under
+multiple Uvicorn workers). Embeddings are written by the Celery worker onto the
+`transactions.embedding` column and indexed with HNSW (cosine).
+
+This module answers FUZZY questions only ("gym or fitness clubs", "things like
+Netflix"). The embedded text contains description / merchant / category and never
+amounts or dates, so dense similarity is never asked to do arithmetic: every
+number in a hit comes from the ledger columns, and totals are computed in SQL.
 """
+from __future__ import annotations
 
-import os
-import chromadb
-from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
+import asyncio
+import uuid
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 
-# ── Paths ────────────────────────────────────────────────────────
-BASE_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CHROMA_DIR = os.path.join(BASE_DIR, "database", "chroma")
-os.makedirs(CHROMA_DIR, exist_ok=True)
+from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# ── ChromaDB persistent client ───────────────────────────────────
-_chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
-_collection    = _chroma_client.get_or_create_collection(
-    name="transactions",
-    metadata={"hnsw:space": "cosine"}
-)
+from backend import embeddings
+from backend.database import Transaction
 
-# ── Embedding model (runs locally, no API key needed) ────────────
-# Downloads ~90 MB on first run, cached after that
-_embedder = SentenceTransformer("all-MiniLM-L6-v2")
+EmbedFn = Callable[[Sequence[str]], list[list[float]]]
+DEFAULT_MIN_SIMILARITY = 0.25  # MiniLM cosine: below this a hit is noise
 
 
-# ── Public API ───────────────────────────────────────────────────
-
-def index_transaction(tx_id: int, tx: dict) -> str:
-    """
-    Convert a transaction dict into a natural-language sentence,
-    embed it, and upsert into ChromaDB.
-    Returns the doc_id stored (for saving back to the DB row).
-    """
-    doc_id = f"tx_{tx_id}"
-    text   = _tx_to_text(tx)
-
-    embedding = _embedder.encode(text).tolist()
-
-    _collection.upsert(
-        ids        = [doc_id],
-        embeddings = [embedding],
-        documents  = [text],
-        metadatas  = [{
-            "tx_id":            tx_id,
-            "user_id":          tx.get("user_id", 0),
-            "amount":           tx.get("amount", 0),
-            "category":         tx.get("category", ""),
-            "transaction_type": tx.get("transaction_type", ""),
-            "is_flagged":       str(tx.get("is_flagged", False)),
-            "date":             str(tx.get("date", "")),
-        }]
-    )
-    return doc_id
+@dataclass(frozen=True, slots=True)
+class SemanticHit:
+    id: uuid.UUID
+    description: str
+    merchant: str | None
+    category: str
+    amount: float
+    transaction_type: str
+    occurred_at: datetime
+    similarity: float
 
 
-def retrieve_relevant(user_message: str, user_id: int, n_results: int = 6) -> list[dict]:
-    """
-    Embed the user's chat message and retrieve the n most similar
-    transactions for that user from ChromaDB.
-    Returns a list of metadata dicts + the original document text.
-    """
-    query_embedding = _embedder.encode(user_message).tolist()
+async def _tune_ann(session: AsyncSession) -> None:
+    """Best effort: widen the HNSW candidate pool so the per-user filter still yields k rows."""
+    await session.execute(text("SET LOCAL hnsw.ef_search = 100"))
+    try:  # pgvector >= 0.8 only; an unknown GUC must not poison the transaction, hence the savepoint
+        async with session.begin_nested():
+            await session.execute(text("SET LOCAL hnsw.iterative_scan = relaxed_order"))
+    except DBAPIError:
+        pass
 
-    try:
-        results = _collection.query(
-            query_embeddings = [query_embedding],
-            n_results        = n_results,
-            where            = {"user_id": user_id},
-            include          = ["documents", "metadatas", "distances"]
+
+async def semantic_search(
+    session: AsyncSession, user_id: uuid.UUID, query: str, *, k: int = 6,
+    min_similarity: float = DEFAULT_MIN_SIMILARITY, embed: EmbedFn | None = None,
+) -> list[SemanticHit]:
+    """Top-k transactions of THIS user by cosine similarity to `query`."""
+    embed = embed or embeddings.embed_texts
+    vector = (await asyncio.to_thread(embed, [query]))[0]  # CPU-bound: keep it off the event loop
+    await _tune_ann(session)
+    dist = Transaction.embedding.cosine_distance(vector).label("dist")
+    rows = (
+        await session.execute(
+            select(
+                Transaction.id, Transaction.description, Transaction.merchant, Transaction.category,
+                Transaction.amount, Transaction.transaction_type, Transaction.occurred_at, dist,
+            )
+            .where(Transaction.user_id == user_id, Transaction.embedding.is_not(None))
+            .order_by(dist)
+            .limit(k)
         )
-    except Exception:
-        return []
-
-    hits = []
-    for doc, meta, dist in zip(
-        results["documents"][0],
-        results["metadatas"][0],
-        results["distances"][0]
-    ):
-        hits.append({
-            "text":       doc,
-            "metadata":   meta,
-            "similarity": round(1 - dist, 3),   # cosine distance → similarity
-        })
-    return hits
-
-
-def index_all_transactions(transactions: list[dict]) -> int:
-    """
-    Bulk-index a list of transaction dicts (e.g. on startup).
-    Returns the number indexed.
-    """
-    count = 0
-    for tx in transactions:
-        if tx.get("transaction_type") == "expense":   # only index expenses for fraud/spend context
-            index_transaction(tx["id"], tx)
-            count += 1
-    return count
-
-
-def build_rag_context(user_message: str, user_id: int) -> str:
-    """
-    Retrieve relevant transactions and format them as a compact
-    context block to inject into the LLM system prompt.
-    """
-    hits = retrieve_relevant(user_message, user_id, n_results=5)
-    if not hits:
-        return ""
-
-    lines = ["RELEVANT PAST TRANSACTIONS (retrieved by semantic similarity):"]
-    for h in hits:
-        sim_pct = int(h["similarity"] * 100)
-        lines.append(f"  • {h['text']}  [match: {sim_pct}%]")
-
-    return "\n".join(lines)
-
-
-# ── Internal helpers ─────────────────────────────────────────────
-
-def _tx_to_text(tx: dict) -> str:
-    """Turn a transaction dict into a natural-language sentence for embedding."""
-    sign    = "received" if tx.get("transaction_type") == "income" else "spent"
-    flagged = " [FLAGGED as suspicious]" if tx.get("is_flagged") else ""
-    date    = str(tx.get("date", ""))[:10]
-    return (
-        f"On {date}, {sign} ₹{tx.get('amount', 0):,.0f} "
-        f"on {tx.get('description', 'unknown')} "
-        f"in category {tx.get('category', 'Other')}.{flagged}"
-    )
+    ).all()
+    hits = [
+        SemanticHit(r.id, r.description, r.merchant, r.category, float(r.amount), r.transaction_type,
+                    r.occurred_at, round(1.0 - float(r.dist), 3))
+        for r in rows
+    ]
+    return [h for h in hits if h.similarity >= min_similarity]

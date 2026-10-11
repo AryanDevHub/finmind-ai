@@ -1,14 +1,97 @@
 {
-  "auc_roc": 0.7702,
-  "n_train_samples": 85332,
-  "n_test_samples": 12000,
+  "model_version": "a5c138cbc1af",
+  "data_source": "behavioural simulation: attack incidents injected into per-user streams; features computed post-hoc from the event stream (see generate_transactions)",
+  "config": {
+    "n_users": 2000,
+    "n_days": 60,
+    "seed": 42,
+    "incident_rate_per_user": 0.15,
+    "undetected_fraud_rate": 0.08,
+    "mislabel_legit_rate": 0.0003,
+    "review_cost": 250.0,
+    "fn_loss_fraction": 1.0,
+    "critical_min_precision": 0.8
+  },
+  "n_rows": 362235,
+  "fraud_rate": 0.00513,
+  "split": {
+    "train_core": 202851,
+    "early_stop": 50713,
+    "calibration": 54335,
+    "test": 54336,
+    "scheme": "chronological 70/15/15"
+  },
+  "scale_pos_weight": 185.444,
+  "best_iteration": 333,
   "features": [
     "amount",
-    "category_enc",
     "hour",
-    "day_of_week"
+    "day_of_week",
+    "tx_count_5m",
+    "tx_sum_24h",
+    "amount_to_avg_ratio",
+    "cat_Food",
+    "cat_Transport",
+    "cat_Shopping",
+    "cat_Entertainment",
+    "cat_Bills",
+    "cat_Health",
+    "cat_Education",
+    "cat_Investment",
+    "cat_Other"
   ],
-  "data_source": "synthetic (documented rule-based generator, see generate_synthetic_data())",
-  "precision_fraud_class": 0.25,
-  "recall_fraud_class": 0.677
+  "test": {
+    "roc_auc": 0.8786,
+    "pr_auc": 0.377,
+    "pr_auc_baseline_prevalence": 0.00436,
+    "pr_auc_static_features_only": 0.2826,
+    "brier_raw": 0.033986,
+    "brier_calibrated": 0.003031,
+    "ece_raw": 0.09711,
+    "ece_calibrated": 0.00064,
+    "at_flag_threshold": {
+      "precision": 0.4059,
+      "recall": 0.4641,
+      "tp": 110,
+      "fp": 161,
+      "fn": 127
+    },
+    "recall_by_attack_type": {
+      "card_testing": 0.933,
+      "account_takeover": 0.611,
+      "slow_drip": 0.034,
+      "spree": 0.1
+    },
+    "expected_cost": {
+      "model": 508376.69,
+      "flag_nothing": 869824.04,
+      "flag_everything": 13584000.0
+    }
+  },
+  "thresholds": {
+    "medium": 0.040179,
+    "high": 0.080357,
+    "critical": 0.258065
+  },
+  "calibration_split_costs": {
+    "cost_at_threshold": 441638.58,
+    "cost_flag_nothing": 685471.49,
+    "cost_flag_everything": 13583750.0
+  },
+  "serving": {
+    "onnx_parity_abs_diff": {
+      "p99_9": 4.4505069623870126e-07,
+      "max": 0.016765659642972996,
+      "rows_over_1e-4": 6,
+      "rows": 54336
+    },
+    "onnx_single_row": {
+      "p50_ms": 0.009,
+      "p99_ms": 0.013
+    },
+    "treeshap_single_row": {
+      "p50_ms": 1.143,
+      "p99_ms": 1.275
+    }
+  }
 }

@@ -1,31 +1,35 @@
-# ── Core ML ───────────────────────────────────────────────────────
-pandas
-numpy
-scikit-learn
-lightgbm
-imbalanced-learn
-shap
-joblib
-
-# ── Database ──────────────────────────────────────────────────────
-sqlalchemy
-psycopg2-binary
-python-dotenv
+# ── Web / API ─────────────────────────────────────────────────────
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+email-validator>=2.1
+python-multipart>=0.0.9
+python-dotenv>=1.0
 
 # ── Auth ──────────────────────────────────────────────────────────
-python-jose[cryptography]
-bcrypt
-python-multipart
-email-validator
+PyJWT>=2.8
+bcrypt>=4.1
 
-# ── Backend framework ───────────────────────────────────────────────
-fastapi
-uvicorn[standard]
+# ── Data layer ────────────────────────────────────────────────────
+sqlalchemy[asyncio]>=2.0.30
+asyncpg>=0.29
+alembic>=1.13
+pgvector>=0.3
 
-# ── LLM ──────────────────────────────────────────────────────────
-groq
+# ── Redis / background jobs ───────────────────────────────────────
+redis>=5.0
+celery[redis]>=5.4
 
-# ── RAG (semantic retrieval for the AI advisor) ────────────────────
-chromadb
-sentence-transformers
-protobuf>=4.25.3,<5
+# ── ML serving (training-only deps live in requirements-train.txt) ─
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.4
+lightgbm>=4.3          # native TreeSHAP (pred_contrib) at inference
+onnxruntime>=1.18
+statsforecast>=2.0     # AutoARIMA forecasts (worker only)
+sentence-transformers>=3.0   # embeddings (worker only); the Dockerfile installs CPU-only torch first
+
+# ── LLM agent ─────────────────────────────────────────────────────
+groq>=0.9
+sqlglot>=25

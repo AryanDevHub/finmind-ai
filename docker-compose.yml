@@ -1,8 +1,27 @@
-version: "3.9"
+# One-command stack:  cp .env.example .env  (set SECRET_KEY)  &&  docker compose up --build
+# App: http://localhost:8080   API docs: http://localhost:8000/docs   (legacy Streamlit: --profile streamlit, :8501)
+name: finmind
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: Dockerfile.backend
+  image: finmind-backend
+  restart: unless-stopped
+  environment:
+    DATABASE_URL: postgresql://finmind:${POSTGRES_PASSWORD:-finmind_dev_password}@postgres:5432/finmind
+    REDIS_URL: redis://redis:6379/0
+    SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set, see .env.example}
+    COOKIE_SECURE: ${COOKIE_SECURE:-false}          # true behind HTTPS
+    CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8501}
+    APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+    GROQ_API_KEY: ${GROQ_API_KEY:-}
+    ENVIRONMENT: ${ENVIRONMENT:-dev}
+    FORWARDED_ALLOW_IPS: "*"        # trust X-Forwarded-For from nginx; keep the backend port bound to localhost
 
 services:
-  db:
-    image: postgres:16-alpine
+  postgres:
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: finmind
@@ -11,50 +30,93 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"      # localhost only; remove to keep the DB private to the compose network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U finmind -d finmind"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
+  redis:
+    image: redis:7-alpine
     restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql://finmind:${POSTGRES_PASSWORD:-finmind_dev_password}@db:5432/finmind
-      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set — see .env.example}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "8000:8000"
+    # AOF on: sessions' revocation list and velocity windows are worth surviving a restart.
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      # Persist ChromaDB's on-disk vector index across restarts
-      - chroma_data:/app/database/chroma
+      - redisdata:/data
+    ports:
+      - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
-  frontend:
+  migrate:                           # one-shot: applies Alembic migrations, then exits
+    <<: *backend
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:                           # FastAPI + ONNX Runtime
+    <<: *backend
+    ports:
+      - "127.0.0.1:8000:8000"       # localhost only: the public entry point is the web service
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  celery_worker:                     # embeddings, budget roll-ups, anomaly + forecast jobs
+    <<: *backend
+    command: ["celery", "-A", "backend.celery_app", "worker", "-l", "INFO", "--concurrency", "2"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A backend.celery_app inspect ping -d celery@$$HOSTNAME -t 5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  celery_beat:                       # scheduler: reconciliation every minute, nightly analytics
+    <<: *backend
+    command: ["celery", "-A", "backend.celery_app", "beat", "-l", "INFO", "--schedule", "/tmp/celerybeat-schedule"]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  web:                               # React app + nginx reverse proxy  ->  http://localhost:8080
+    build:
+      context: ./web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:                          # legacy Streamlit UI: docker compose --profile streamlit up
+    profiles: ["streamlit"]
     build:
       context: .
       dockerfile: Dockerfile.frontend
     restart: unless-stopped
     environment:
       API_URL: http://backend:8000
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+    ports:
+      - "8501:8501"
     depends_on:
       backend:
         condition: service_healthy
-    ports:
-      - "8501:8501"
 
 volumes:
   pgdata:
-  chroma_data:
+  redisdata:

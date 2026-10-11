@@ -1,32 +1,3 @@
-# ── Core ML ───────────────────────────────────────────────────────
-pandas
-numpy
-scikit-learn
-lightgbm
-imbalanced-learn
-shap
-joblib
-
-# ── Database ──────────────────────────────────────────────────────
-sqlalchemy
-psycopg2-binary
-python-dotenv
-
-# ── Auth ──────────────────────────────────────────────────────────
-python-jose[cryptography]
-bcrypt
-python-multipart
-email-validator
-
-# ── Frontend ──────────────────────────────────────────────────────
-streamlit
-plotly
-requests
-
-# ── LLM ──────────────────────────────────────────────────────────
-groq
-
-# ── RAG (semantic retrieval for the AI advisor) ────────────────────
-chromadb
-sentence-transformers
-protobuf>=4.25.3,<5
+# Convenience for hosts that expect a single file (e.g. Render native Python runtime)
+-r requirements-backend.txt
+-r requirements-frontend.txt

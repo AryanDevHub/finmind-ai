@@ -1,1 +1,1 @@
-["amount", "category_enc", "hour", "day_of_week"]
+["amount", "hour", "day_of_week", "tx_count_5m", "tx_sum_24h", "amount_to_avg_ratio", "cat_Food", "cat_Transport", "cat_Shopping", "cat_Entertainment", "cat_Bills", "cat_Health", "cat_Education", "cat_Investment", "cat_Other"]

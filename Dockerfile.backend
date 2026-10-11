@@ -1,31 +1,38 @@
-# Dockerfile.backend — FastAPI + fraud model + ChromaDB RAG
+# Dockerfile.backend — one image, three roles: API (uvicorn), Celery worker, Celery beat / migrations.
 FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/opt/hf
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libgomp1 \
-    curl \
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install CPU-only torch FIRST, from PyTorch's own CPU index.
-# sentence-transformers pulls torch too, but since it's already
-# satisfied here, pip won't reach for the ~2.5GB CUDA/GPU build.
-# This container never uses a GPU, so the CPU build is all we need.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+# CPU-only torch FIRST so sentence-transformers doesn't pull the multi-GB CUDA build.
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 COPY requirements-backend.txt .
-RUN pip install --no-cache-dir -r requirements-backend.txt
+RUN pip install -r requirements-backend.txt
 
+# Bake the embedding model into the image: no download on first request, works offline at runtime.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
 COPY backend/ ./backend/
+# Includes the trained artifacts (fraud_model.onnx, lgbm_booster.txt, calibrator.json, *.json).
+# Train once locally (python ml_models/train_fraud_model.py) and commit them; they are ~2 MB.
 COPY ml_models/ ./ml_models/
 
-RUN mkdir -p /app/database
+RUN useradd --system --uid 10001 --home-dir /app app && chown -R app:app /app /opt/hf
+USER app
 
 EXPOSE 8000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
+    CMD curl -fsS http://localhost:8000/health || exit 1
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# WEB_CONCURRENCY is safe now: no embedded SQLite/Chroma files, all state is in Postgres/Redis.
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-2} --proxy-headers"]
