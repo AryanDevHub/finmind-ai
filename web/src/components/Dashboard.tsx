@@ -16,6 +16,8 @@ import { MetricCard } from "./MetricCard";
 import { ProgressRing } from "./ProgressRing";
 import { Sparkline } from "./Sparkline";
 import { TransactionLedger } from "./TransactionLedger";
+import { BankConnectCard } from "./BankConnectCard";
+import { useBankConnections } from "@/lib/bankSync";
 import { GlassCard } from "./ui/GlassCard";
 import { Skeleton } from "./ui/Skeleton";
 
@@ -31,6 +33,7 @@ function Section({ title, aside, children, className }: { title: string; aside?:
 /** Executive telemetry: 4 animated KPIs, three interactive charts and the latest transactions. */
 export function Dashboard({ onAdd, goTo }: { onAdd: () => void; goTo: (r: Route) => void }) {
   const { data: txs = [], isPending, isError, refetch } = useTransactions();
+  const { data: bankConns, isLoading: bankLoading, refetch: refetchBank } = useBankConnections();
   const del = useDeleteTransaction();
   const [scope, setScope] = useState<"month" | "all">("month");
 
@@ -70,13 +73,23 @@ export function Dashboard({ onAdd, goTo }: { onAdd: () => void; goTo: (r: Route)
   }
   if (txs.length === 0) {
     return (
-      <GlassCard spotlight={false} className="grid place-items-center gap-4 overflow-hidden px-6 py-20 text-center">
-        <div aria-hidden className="absolute -top-24 left-1/2 h-64 w-64 -translate-x-1/2 animate-glow rounded-full blur-3xl" style={{ background: "radial-gradient(circle,#22D3EE,transparent 70%)" }} />
-        <ShieldCheck className="relative h-10 w-10 text-signal animate-float" />
-        <h2 className="relative text-xl font-bold">Your command center is empty</h2>
-        <p className="relative max-w-sm text-sm text-ink-2">Add a transaction and watch the fraud model score it in real time, with the reasons why.</p>
-        <button className="btn-primary relative" onClick={onAdd}><PlusCircle className="h-4 w-4" /> Add your first transaction</button>
-      </GlassCard>
+      <div className="space-y-6">
+        <motion.div variants={item}>
+          <BankConnectCard
+            connections={bankConns}
+            isLoading={bankLoading}
+            onRefresh={() => void refetchBank()}
+          />
+        </motion.div>
+
+        <GlassCard spotlight={false} className="grid place-items-center gap-4 overflow-hidden px-6 py-14 text-center">
+          <div aria-hidden className="absolute -top-24 left-1/2 h-64 w-64 -translate-x-1/2 animate-glow rounded-full blur-3xl" style={{ background: "radial-gradient(circle,#22D3EE,transparent 70%)" }} />
+          <ShieldCheck className="relative h-10 w-10 text-signal animate-float" />
+          <h2 className="relative text-xl font-bold">Your command center is empty</h2>
+          <p className="relative max-w-sm text-sm text-ink-2">Connect your bank account above to automatically sync statements, or add a transaction manually.</p>
+          <button className="btn-primary relative" onClick={onAdd}><PlusCircle className="h-4 w-4" /> Add a manual transaction</button>
+        </GlassCard>
+      </div>
     );
   }
 
@@ -103,6 +116,14 @@ export function Dashboard({ onAdd, goTo }: { onAdd: () => void; goTo: (r: Route)
             </span>
           } />
       </div>
+
+      <motion.div variants={item}>
+        <BankConnectCard
+          connections={bankConns}
+          isLoading={bankLoading}
+          onRefresh={() => void refetchBank()}
+        />
+      </motion.div>
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_1fr]">
         <Section title={scope === "month" && d.monthHasSpend ? "Spending by category · this month" : "Spending by category · all time"}

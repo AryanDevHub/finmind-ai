@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AddTransactionPanel } from "@/components/AddTransactionPanel";
 import { AIChatDrawer } from "@/components/AIChatDrawer";
 import { AuthScreen } from "@/components/AuthScreen";
+import { BankConnectCard } from "@/components/BankConnectCard";
 import { BudgetView } from "@/components/BudgetView";
 import { Dashboard } from "@/components/Dashboard";
 import { InsightsView } from "@/components/InsightsView";
@@ -11,6 +12,7 @@ import { Logo } from "@/components/Logo";
 import { Sidebar, NAV } from "@/components/Sidebar";
 import { TopBar } from "@/components/TopBar";
 import { TransactionsView } from "@/components/TransactionsView";
+import { useBankConnections } from "@/lib/bankSync";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { useHashRoute } from "@/hooks/useHashRoute";
 import { useAuth } from "@/lib/auth";
@@ -26,6 +28,8 @@ function Shell({ user }: { user: User }) {
   const [docked, setDocked] = useState(false);
   const heartbeat = useHeartbeat();
   const { data: txs } = useTransactions();
+
+  const { data: bankConns, isLoading: bankLoading, refetch: refetchBank } = useBankConnections();
 
   const threat = useMemo(() => computeFraudMetrics(txs ?? []).threat, [txs]);
   const t = THREAT_STYLE[threat];
@@ -59,6 +63,15 @@ function Shell({ user }: { user: User }) {
           <AnimatePresence mode="wait" initial={false}>
             <motion.div key={route} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
               {route === "dashboard" && <Dashboard onAdd={openAdd} goTo={go} />}
+              {route === "bank" && (
+                <div className="max-w-4xl mx-auto">
+                  <BankConnectCard
+                    connections={bankConns}
+                    isLoading={bankLoading}
+                    onRefresh={() => void refetchBank()}
+                  />
+                </div>
+              )}
               {route === "transactions" && <TransactionsView />}
               {route === "budgets" && <BudgetView />}
               {route === "insights" && <InsightsView />}

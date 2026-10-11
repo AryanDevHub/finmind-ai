@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     llm_model: str = "openai/gpt-oss-120b"   # llama-3.3-70b-versatile is Enterprise-only on Groq
     chat_rate_per_minute: int = Field(20, ge=1)
 
+    # Account Aggregator / Bank Sync
+    aa_base_url: str = "https://sandbox.setu.co/api"  # Setu AA sandbox
+    aa_api_key: str | None = None
+    aa_api_secret: str | None = None
+    aa_webhook_secret: str | None = None
+
     @field_validator("cors_origins")
     @classmethod
     def _no_wildcard(cls, v: str) -> str:

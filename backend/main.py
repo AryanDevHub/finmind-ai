@@ -17,7 +17,7 @@ import json
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, AsyncIterator
 
 from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
@@ -32,10 +32,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend import analytics, auth
+from backend.aa_client import AAGatewayClient, verify_webhook_signature
 from backend.auth import CurrentUser, get_current_user, get_redis
 from backend.celery_app import celery_app
 from backend.chatbot import GroqLLM, run_agent
-from backend.database import Budget, Transaction, User, dispose_engine, get_session, ping, spent_subquery
+from backend.database import Budget, Transaction, User, BankConnection, dispose_engine, get_session, ping, spent_subquery
 from backend.schemas import (
     AnomalyOut, AnomalyReport, BudgetOut, BudgetSet, Category, ChatRequest, ChatResponse, RiskFactorOut, RiskPreview,
     Token, ToolTraceOut, TransactionAddResponse, TransactionCreate, TransactionOut, UserOut, UserRegister,
@@ -454,6 +455,266 @@ async def refresh_analytics(redis: RedisDep, user: UserDep) -> dict[str, str]:
     await _enqueue("finmind.score_user_anomalies", str(user.id))
     await _enqueue("finmind.forecast_user", str(user.id))
     return {"status": "queued"}
+
+
+# ───────────────────────────── Bank Connection (AA) ──────────────────────
+import hashlib
+import re
+from pydantic import BaseModel, Field
+
+
+class BankConnectRequest(BaseModel):
+    phone: str = Field(..., description="10-digit Indian mobile number")
+
+
+class BankConnectionOut(BaseModel):
+    id: uuid.UUID
+    fip_id: str
+    fip_name: str
+    status: str
+    consent_id: str
+    consent_start: datetime
+    consent_expiry: datetime
+    last_synced_at: datetime | None = None
+    created_at: datetime
+
+
+@app.post("/api/bank/connect")
+async def connect_bank(
+    req: BankConnectRequest,
+    session: SessionDep,
+    redis: RedisDep,
+    user: UserDep,
+) -> dict[str, Any]:
+    """Initiate Account Aggregator bank connection."""
+    # Validate phone format: 10 digits starting with 6-9
+    clean_phone = req.phone.strip()
+    if clean_phone.startswith("+91"):
+        clean_phone = clean_phone[3:].strip()
+    elif clean_phone.startswith("91") and len(clean_phone) == 12:
+        clean_phone = clean_phone[2:].strip()
+
+    if not re.fullmatch(r"^[6-9]\d{9}$", clean_phone):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid 10-digit Indian mobile number")
+
+    # Rate limited: max 3 per user per hour
+    rl_key = f"bank_connect_rl:{user.id}"
+    attempts = await redis.incr(rl_key)
+    if attempts == 1:
+        await redis.expire(rl_key, 3600)
+    if attempts > 3:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many connection attempts. Max 3 per hour.")
+
+    settings = get_settings()
+    client = AAGatewayClient(
+        base_url=settings.aa_base_url,
+        api_key=settings.aa_api_key or "sandbox-mock-key",
+        api_secret=settings.aa_api_secret or "",
+        webhook_secret=settings.aa_webhook_secret or "",
+    )
+    try:
+        consent_data = await client.create_consent_request(user.id, clean_phone)
+    except Exception as exc:
+        log.error("Failed to create consent request: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Account Aggregator error: {exc}")
+    finally:
+        await client.close()
+
+    phone_hash = hashlib.sha256(clean_phone.encode("utf-8")).hexdigest()
+    now = datetime.now(timezone.utc)
+    expiry = now + timedelta(days=180)
+
+    connection = BankConnection(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        consent_id=consent_data["consent_id"],
+        consent_handle=consent_data.get("consent_handle"),
+        fip_id="SETU-FIP-MOCK",
+        fip_name="Sandbox Mock Bank",
+        phone_hash=phone_hash,
+        status="PENDING",
+        consent_start=now,
+        consent_expiry=expiry,
+    )
+    session.add(connection)
+    await session.commit()
+
+    return {
+        "consent_id": consent_data["consent_id"],
+        "redirect_url": consent_data["redirect_url"],
+        "status": "PENDING",
+    }
+
+
+@app.get("/api/bank/connections", response_model=list[BankConnectionOut])
+async def list_bank_connections(session: SessionDep, user: UserDep) -> list[BankConnectionOut]:
+    """List bank connections for current user."""
+    rows = (
+        await session.execute(
+            select(BankConnection).where(BankConnection.user_id == user.id).order_by(BankConnection.created_at.desc())
+        )
+    ).scalars().all()
+    return [
+        BankConnectionOut(
+            id=r.id,
+            fip_id=r.fip_id,
+            fip_name=r.fip_name,
+            status=r.status,
+            consent_id=r.consent_id,
+            consent_start=r.consent_start,
+            consent_expiry=r.consent_expiry,
+            last_synced_at=r.last_synced_at,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@app.post("/api/bank/sync/{connection_id}", status_code=status.HTTP_202_ACCEPTED)
+async def sync_bank_connection(
+    connection_id: uuid.UUID,
+    session: SessionDep,
+    user: UserDep,
+) -> dict[str, str]:
+    """Manual sync trigger for active bank connection."""
+    conn = (
+        await session.execute(
+            select(BankConnection).where(BankConnection.id == connection_id, BankConnection.user_id == user.id)
+        )
+    ).scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bank connection not found")
+    if conn.status != "ACTIVE":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Cannot sync connection with status '{conn.status}'")
+
+    settings = get_settings()
+    client = AAGatewayClient(
+        base_url=settings.aa_base_url,
+        api_key=settings.aa_api_key or "sandbox-mock-key",
+        api_secret=settings.aa_api_secret or "",
+        webhook_secret=settings.aa_webhook_secret or "",
+    )
+    try:
+        session_info = await client.create_data_session(conn.consent_id)
+        session_id = session_info["session_id"]
+    except Exception as exc:
+        log.error("Failed to create AA data session: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to initiate bank sync: {exc}")
+    finally:
+        await client.close()
+
+    await _enqueue("finmind.process_aa_data_session", session_id, str(user.id), str(conn.id))
+    return {"status": "sync_queued", "session_id": session_id}
+
+
+@app.delete("/api/bank/connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_bank_connection(
+    connection_id: uuid.UUID,
+    session: SessionDep,
+    user: UserDep,
+) -> None:
+    """Revoke consent for bank connection."""
+    conn = (
+        await session.execute(
+            select(BankConnection).where(BankConnection.id == connection_id, BankConnection.user_id == user.id)
+        )
+    ).scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bank connection not found")
+
+    settings = get_settings()
+    client = AAGatewayClient(
+        base_url=settings.aa_base_url,
+        api_key=settings.aa_api_key or "sandbox-mock-key",
+        api_secret=settings.aa_api_secret or "",
+        webhook_secret=settings.aa_webhook_secret or "",
+    )
+    try:
+        await client.revoke_consent(conn.consent_id)
+    except Exception as exc:
+        log.warning("Revoke AA consent upstream warning: %s", exc)
+    finally:
+        await client.close()
+
+    conn.status = "REVOKED"
+    await session.commit()
+
+
+@app.post("/api/webhooks/account-aggregator", status_code=status.HTTP_200_OK)
+async def handle_aa_webhook(
+    request: Request,
+    session: SessionDep,
+) -> dict[str, str]:
+    """Webhook handler for AA gateway events."""
+    raw_body = await request.body()
+    signature = request.headers.get("X-Webhook-Signature") or ""
+
+    settings = get_settings()
+    secret = settings.aa_webhook_secret or ""
+
+    if not signature or not secret or not verify_webhook_signature(raw_body, signature, secret):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or missing webhook signature")
+
+    try:
+        event = json.loads(raw_body)
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid JSON body")
+
+    event_type = event.get("type") or event.get("eventType") or ""
+    consent_id = event.get("consentId") or event.get("ConsentStatusNotification", {}).get("consentId")
+
+    if event_type == "CONSENT_STATUS_UPDATE" or "ConsentStatusNotification" in event:
+        status_val = (
+            event.get("status")
+            or event.get("ConsentStatusNotification", {}).get("consentStatus")
+            or ""
+        ).upper()
+        if consent_id:
+            conn = (
+                await session.execute(
+                    select(BankConnection).where(BankConnection.consent_id == consent_id)
+                )
+            ).scalar_one_or_none()
+            if conn:
+                if status_val in ("ACTIVE", "READY", "SUCCEEDED", "APPROVED"):
+                    conn.status = "ACTIVE"
+                    await session.commit()
+                    # Trigger initial sync
+                    try:
+                        client = AAGatewayClient(
+                            base_url=settings.aa_base_url,
+                            api_key=settings.aa_api_key or "sandbox-mock-key",
+                            api_secret=settings.aa_api_secret or "",
+                            webhook_secret=settings.aa_webhook_secret or "",
+                        )
+                        session_info = await client.create_data_session(conn.consent_id)
+                        await client.close()
+                        await _enqueue("finmind.process_aa_data_session", session_info["session_id"], str(conn.user_id), str(conn.id))
+                    except Exception as exc:
+                        log.error("Failed to trigger initial sync after consent approval: %s", exc)
+                elif status_val in ("REVOKED", "EXPIRED", "REJECTED", "FAILED"):
+                    conn.status = "REVOKED" if status_val == "REVOKED" else ("EXPIRED" if status_val == "EXPIRED" else "REVOKED")
+                    await session.commit()
+
+    elif event_type == "SESSION_STATUS_UPDATE" or "FIStatusNotification" in event:
+        session_id = event.get("sessionId") or event.get("FIStatusNotification", {}).get("sessionId")
+        session_status = (
+            event.get("sessionStatus")
+            or event.get("FIStatusNotification", {}).get("sessionStatus")
+            or ""
+        ).upper()
+        if session_id and (session_status in ("COMPLETED", "READY", "SUCCESS") or not session_status):
+            # Find bank connection by consent_id if available or session lookup
+            if consent_id:
+                conn = (
+                    await session.execute(
+                        select(BankConnection).where(BankConnection.consent_id == consent_id)
+                    )
+                ).scalar_one_or_none()
+                if conn:
+                    await _enqueue("finmind.process_aa_data_session", session_id, str(conn.user_id), str(conn.id))
+
+    return {"status": "ok"}
 
 
 # ───────────────────────────── Chat (hybrid agent) ───────────────────────

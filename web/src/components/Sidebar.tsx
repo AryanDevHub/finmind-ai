@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { motion } from "framer-motion";
-import { LayoutDashboard, LineChart, PiggyBank, Receipt, type LucideIcon } from "lucide-react";
+import { Building2, LayoutDashboard, LineChart, PiggyBank, Receipt, type LucideIcon } from "lucide-react";
 
 import type { Route } from "@/hooks/useHashRoute";
 import { spring } from "@/lib/motion";
@@ -8,6 +8,7 @@ import { Logo } from "./Logo";
 
 export const NAV: { id: Route; label: string; icon: LucideIcon }[] = [
   { id: "dashboard", label: "Command Center", icon: LayoutDashboard },
+  { id: "bank", label: "Bank Sync", icon: Building2 },
   { id: "transactions", label: "Transactions", icon: Receipt },
   { id: "budgets", label: "Budgets", icon: PiggyBank },
   { id: "insights", label: "Insights", icon: LineChart },

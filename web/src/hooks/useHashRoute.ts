@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-export const ROUTES = ["dashboard", "transactions", "budgets", "insights"] as const;
+export const ROUTES = ["dashboard", "transactions", "budgets", "insights", "bank"] as const;
 export type Route = (typeof ROUTES)[number];
 
 const read = (): Route => {

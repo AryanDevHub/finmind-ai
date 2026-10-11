@@ -146,7 +146,10 @@ describe("Dashboard", () => {
       tx({ amount: 10_000, description: "Big spend", occurred_at: now }),
       tx({ amount: 777, description: "Probe", is_flagged: true, risk_level: "CRITICAL", fraud_score: 91, occurred_at: now, fraud_factors: FACTORS }),
     ];
-    vi.spyOn(apiModule, "api").mockResolvedValue(rows);
+    vi.spyOn(apiModule, "api").mockImplementation(async (path: string) => {
+      if (path === "/api/bank/connections") return [];
+      return rows;
+    });
     wrap(<Dashboard onAdd={vi.fn()} goTo={vi.fn()} />);
     expect(await screen.findByText("Monthly inflow")).toBeInTheDocument();
     expect(screen.getByText("Active fraud flags")).toBeInTheDocument();

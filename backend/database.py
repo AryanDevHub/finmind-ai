@@ -248,6 +248,10 @@ class Transaction(Base):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     embedded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Account Aggregator bank sync fields
+    bank_txn_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), default="manual", server_default=text("'manual'"))
+
 
 class Budget(Base):
     __tablename__ = "budgets"
@@ -283,6 +287,30 @@ class RefreshToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     replaced_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+
+
+class BankConnection(Base):
+    __tablename__ = "bank_connections"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'ACTIVE', 'REVOKED', 'EXPIRED')",
+            name="bank_conn_status_valid",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    consent_id: Mapped[str] = mapped_column(String(128), unique=True)
+    consent_handle: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fip_id: Mapped[str] = mapped_column(String(64))
+    fip_name: Mapped[str] = mapped_column(String(128))
+    phone_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default="PENDING", server_default=text("'PENDING'"))
+    consent_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consent_expiry: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    encrypted_consent_artifact: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 def spent_subquery(start: datetime, end: datetime):
