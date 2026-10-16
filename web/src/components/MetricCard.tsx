@@ -12,9 +12,9 @@ export interface MetricCardProps {
   value: number;
   /** Formats the (animated) number: currency, percent, plain. */
   format: (n: number) => string;
-  /** Colour of the ambient backlight and accents. */
+  /** Colour of the accents. */
   color: string;
-  /** Pulsating glow, used for active fraud alerts. */
+  /** Active fraud alert badge. */
   pulse?: boolean;
   /** Month-over-month change in %. `good` says which direction is desirable. */
   delta?: { pct: number | null; good: "up" | "down" };
@@ -26,27 +26,37 @@ export interface MetricCardProps {
 }
 
 /**
- * KPI tile: count-up number (tabular figures), a coloured ambient backlight that can pulse, 3D tilt on hover,
- * and a staggered entrance when placed inside a `variants={container}` parent.
+ * Precision KPI Tile
+ * Engineered tabular numbers, clean percentage badges, and integrated sparklines.
  */
-export function MetricCard({ label, value, format, color, pulse, delta, hint, visual, footer }: MetricCardProps) {
+export function MetricCard({ label, value, format, color: _color, pulse: _pulse, delta, hint, visual, footer }: MetricCardProps) {
   const shown = useCountUp(value);
   const up = (delta?.pct ?? 0) >= 0;
   const favourable = delta?.pct == null ? null : (delta.good === "up") === up;
 
   return (
-    <GlassCard tilt variants={item} className="overflow-hidden p-5">
-      {/* ambient backlight */}
-      <div aria-hidden className={clsx("pointer-events-none absolute -right-10 -top-14 h-44 w-44 rounded-full blur-3xl", pulse ? "animate-glow" : "opacity-30")}
-        style={{ background: `radial-gradient(circle, ${color}, transparent 68%)` }} />
-      <div className="relative flex items-start justify-between gap-3">
+    <GlassCard variants={item} className="p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="label">{label}</p>
-          <p className="num mt-2 whitespace-nowrap text-[26px] font-semibold leading-none tracking-tight" aria-label={`${label}: ${format(value)}`}>{format(shown)}</p>
-          <div className="mt-3 flex min-h-[20px] flex-wrap items-center gap-2 text-xs text-ink-3">
+          <p
+            className="num mt-2 whitespace-nowrap text-2xl font-bold tracking-tight text-ink-1"
+            aria-label={`${label}: ${format(value)}`}
+          >
+            {format(shown)}
+          </p>
+
+          <div className="mt-2.5 flex min-h-[20px] flex-wrap items-center gap-2 text-xs text-ink-3">
             {delta && delta.pct != null && (
-              <motion.span initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
-                className={clsx("num inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-semibold", favourable ? "bg-gain/10 text-gain" : "bg-warn/10 text-warn")}>
+              <motion.span
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className={clsx(
+                  "num inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-semibold",
+                  favourable ? "bg-emerald/10 text-emerald" : "bg-warn/10 text-warn"
+                )}
+              >
                 {up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                 {Math.abs(delta.pct).toFixed(0)}%
               </motion.span>
@@ -54,9 +64,11 @@ export function MetricCard({ label, value, format, color, pulse, delta, hint, vi
             {hint}
           </div>
         </div>
+
         {visual && <div className="shrink-0 self-center">{visual}</div>}
       </div>
-      {footer && <div className="relative mt-3">{footer}</div>}
+
+      {footer && <div className="mt-3 border-t border-border/60 pt-2">{footer}</div>}
     </GlassCard>
   );
 }

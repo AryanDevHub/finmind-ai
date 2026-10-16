@@ -2,80 +2,126 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ───────────────────────── Base ───────────────────────── */
+/* ───────────────────────── Base Styles ───────────────────────── */
 @layer base {
-  :root { color-scheme: dark; }
-  html, body, #root { height: 100%; }
+  :root {
+    color-scheme: dark;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
   body {
-    @apply bg-void font-sans text-ink-1 antialiased;
-    background-image:
-      radial-gradient(900px 600px at 8% -10%, rgba(34, 211, 238, 0.07), transparent 60%),
-      radial-gradient(800px 560px at 100% 0%, rgba(99, 102, 241, 0.06), transparent 55%);
+    @apply bg-void font-sans text-ink-1 antialiased selection:bg-brand/25 selection:text-white;
+    background-color: #080C14;
+    background-image: 
+      radial-gradient(1000px 500px at 50% -50px, rgba(56, 189, 248, 0.03), transparent 70%);
     background-attachment: fixed;
-    font-feature-settings: "cv11", "ss01";
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
-  ::selection { background: rgba(34, 211, 238, 0.3); }
-  *:focus-visible { @apply outline-none ring-2 ring-signal/70 ring-offset-2 ring-offset-void; }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-thumb { @apply rounded-full bg-white/10; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-white/20; }
-  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-void;
+  }
+
+  /* Micro Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border hover:bg-ink-4 transition-colors;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 }
 
-/* ───────────────────────── Components ───────────────────────── */
+/* ───────────────────────── Precision Fintech Components ───────────────────────── */
 @layer components {
-  /* Primary surface: card colour, hairline border that lights up cyan on hover. */
-  .glass {
-    @apply relative rounded-2xl border border-white/[0.08] bg-card/80 shadow-glass backdrop-blur-xl transition-colors duration-300;
+  /* Precision Surface Card — Crisp 1px hairline border + subtle 1px top highlight */
+  .glass, .glass-static {
+    @apply relative rounded-xl border border-border bg-card text-ink-1 shadow-card transition-all duration-200;
   }
-  .glass:hover { @apply border-signal/30; }
-  .glass-static { @apply relative rounded-2xl border border-white/[0.08] bg-card/80 shadow-glass backdrop-blur-xl; }
-  /* Elevated surface: modals, drawers, popovers. */
-  .glass-elevated { @apply rounded-2xl border border-white/[0.1] bg-elevated/90 shadow-2xl backdrop-blur-2xl; }
-  /* Tabular numerals so digits never jitter while counting. */
-  .num { @apply font-mono tabular-nums; font-variant-numeric: tabular-nums slashed-zero; }
-  .label { @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3; }
-
-  /* Cursor-following spotlight + illuminated border (driven by --mx / --my set in GlassCard). */
-  .spotlight::before, .spotlight::after {
-    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-    opacity: 0; transition: opacity 0.35s ease;
-  }
-  .spotlight::before {
-    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(34, 211, 238, 0.10), transparent 65%);
-  }
-  .spotlight::after {
-    padding: 1px;
-    background: radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%), rgba(34, 211, 238, 0.7), transparent 70%);
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor; mask-composite: exclude;
-  }
-  .spotlight:hover::before, .spotlight:hover::after { opacity: 1; }
-
-  /* Shimmer skeleton. */
-  .skeleton { @apply relative overflow-hidden rounded-lg bg-white/[0.05]; }
-  .skeleton::after {
-    content: ""; position: absolute; inset: 0; transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
-    animation: shimmer 1.6s infinite;
+  .glass:hover {
+    @apply border-border-strong shadow-cardHover;
   }
 
-  /* Threat bar sweeping across the very top of the viewport. */
-  .threat-bar { background-size: 200% 100%; animation: sweep 5s linear infinite; }
+  /* Elevated surface: modals, floating drawers, tooltips */
+  .glass-elevated {
+    @apply rounded-xl border border-border-strong bg-elevated shadow-modal backdrop-blur-md;
+  }
 
+  /* Tabular Numerals — Fixed-width digits for financial data, prevents layout jitter */
+  .num {
+    @apply font-mono tabular-nums;
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+
+  /* Architectural Micro-label */
+  .label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3;
+  }
+
+  /* Buttons */
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold tracking-wide transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98];
   }
-  .btn-primary { @apply btn bg-signal text-void hover:bg-cyan-300; box-shadow: 0 8px 24px -8px rgba(34, 211, 238, 0.55); }
-  .btn-ghost { @apply btn border border-white/10 bg-white/[0.03] text-ink-1 hover:border-signal/30 hover:bg-white/[0.06]; }
-  .btn-danger { @apply btn border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20; }
+  
+  .btn-primary {
+    @apply btn bg-emerald hover:bg-emerald-hover text-white shadow-sm;
+  }
+
+  .btn-secondary {
+    @apply btn border border-border bg-surface hover:bg-elevated hover:border-border-strong text-ink-1;
+  }
+
+  .btn-ghost {
+    @apply btn border border-border/80 bg-surface/50 hover:bg-surface hover:border-border text-ink-2 hover:text-ink-1;
+  }
+
+  .btn-danger {
+    @apply btn border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20;
+  }
+
+  /* Input Fields */
   .field {
-    @apply w-full rounded-xl border border-white/10 bg-void/60 px-3.5 py-2.5 text-sm text-ink-1 placeholder:text-ink-4 transition-colors;
+    @apply w-full rounded-lg border border-border bg-[#0C121D] px-3.5 py-2 text-sm text-ink-1 placeholder:text-ink-4 transition-colors focus:border-brand/70 focus:outline-none focus:ring-1 focus:ring-brand/30;
   }
-  .field:focus { @apply border-signal/60 outline-none ring-0; box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15); }
+
+  /* Shimmer Skeleton */
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-surface/60;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+    animation: shimmer 1.8s infinite;
+  }
+
+  /* Subtle Status Dot */
+  .status-dot {
+    @apply inline-block h-2 w-2 rounded-full;
+  }
 }
 
-/* Honour reduced-motion: no sweeping, pulsing or shimmering. */
+/* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
-  .threat-bar, .skeleton::after, .animate-glow, .animate-float, .animate-sweep { animation: none !important; }
+  .skeleton::after, * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

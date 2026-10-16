@@ -1,41 +1,54 @@
 import type { Config } from "tailwindcss";
 
-// FinMind design tokens — "Deep Void" theme.
+// FinMind AI Design System — Precision Institutional Fintech (Swiss Minimalist / Stripe / Ramp inspired)
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        void: "#070A11",        // app background
-        card: "#0E1424",        // primary surfaces
-        elevated: "#151F36",    // dropdowns, modals, drawers
-        ink: { 1: "#EAF0FA", 2: "#9AA8C4", 3: "#5C6B8A", 4: "#3A4663" },
-        signal: "#22D3EE",      // cyan accent
-        gain: "#34D399",
-        warn: "#FBBF24",
-        danger: "#F43F5E",
+        void: "#080C14",        // Deep architectural obsidian
+        card: "#0E1422",        // Primary surface
+        surface: "#121A2C",     // Secondary surface / table headers
+        elevated: "#182238",    // Modals, popovers, dropdowns
+        border: {
+          subtle: "#161F33",
+          DEFAULT: "#1E2942",
+          strong: "#2B3A5C",
+        },
+        ink: {
+          1: "#F8FAFC",         // Primary text
+          2: "#94A3B8",         // Secondary text
+          3: "#64748B",         // Muted metadata
+          4: "#475569",         // Dim timestamps / icons
+        },
+        brand: {
+          DEFAULT: "#38BDF8",   // Precision Sky Blue
+          hover: "#0284C7",
+          subtle: "rgba(56, 189, 248, 0.08)",
+        },
+        emerald: {
+          DEFAULT: "#10B981",
+          hover: "#059669",
+          subtle: "rgba(16, 185, 129, 0.08)",
+        },
+        gain: "#10B981",        // Income / savings
+        warn: "#F59E0B",        // Medium risk / warnings
+        danger: "#EF4444",      // Fraud / critical risk
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans Variable"', "Inter", "system-ui", "sans-serif"],
-        mono: ['"JetBrains Mono Variable"', "ui-monospace", "SFMono-Regular", "monospace"],
+        sans: ['"Plus Jakarta Sans Variable"', "Inter", "system-ui", "-apple-system", "sans-serif"],
+        mono: ['"JetBrains Mono Variable"', "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       boxShadow: {
-        glass: "0 1px 0 0 rgba(255,255,255,0.04) inset, 0 20px 40px -24px rgba(0,0,0,0.6)",
-        glow: "0 0 0 1px rgba(34,211,238,0.25), 0 0 32px -4px rgba(34,211,238,0.35)",
+        card: "inset 0 1px 0 0 rgba(255, 255, 255, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.35)",
+        cardHover: "inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 4px 16px -2px rgba(0, 0, 0, 0.5)",
+        modal: "inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 24px 48px -12px rgba(0, 0, 0, 0.75)",
       },
       keyframes: {
-        sweep: { "0%": { backgroundPosition: "0% 0" }, "100%": { backgroundPosition: "200% 0" } },
-        glow: { "0%,100%": { opacity: "0.35", transform: "scale(1)" }, "50%": { opacity: "0.75", transform: "scale(1.08)" } },
         shimmer: { "100%": { transform: "translateX(100%)" } },
-        blink: { "0%,49%": { opacity: "1" }, "50%,100%": { opacity: "0" } },
-        float: { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-6px)" } },
       },
       animation: {
-        sweep: "sweep 5s linear infinite",
-        glow: "glow 2.4s ease-in-out infinite",
-        shimmer: "shimmer 1.6s infinite",
-        blink: "blink 1s steps(1) infinite",
-        float: "float 6s ease-in-out infinite",
+        shimmer: "shimmer 1.8s infinite",
       },
     },
   },

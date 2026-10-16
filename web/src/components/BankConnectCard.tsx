@@ -165,17 +165,17 @@ export function BankConnectCard({ connections, isLoading, onRefresh }: Props) {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-signal/20 bg-signal/10 text-signal shadow-[0_0_15px_rgba(34,211,238,0.15)]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-brand">
               <Building2 className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold tracking-tight text-ink-1">Bank Sync</h2>
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-signal">
-                  RBI AA
+                <h2 className="text-base font-bold tracking-tight text-ink-1">Bank Sync</h2>
+                <span className="rounded border border-emerald/20 bg-emerald/5 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-emerald">
+                  RBI AA PROTOCOL
                 </span>
               </div>
-              <p className="text-xs text-ink-3">Live financial telemetry via Account Aggregator</p>
+              <p className="text-xs text-ink-3">Live automated transaction streaming via Account Aggregator</p>
             </div>
           </div>
 
@@ -344,17 +344,17 @@ export function BankConnectCard({ connections, isLoading, onRefresh }: Props) {
         </div>
 
         {/* Trust Badges */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-4 text-[11px] text-ink-3">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-[11px] text-ink-3">
           <div className="flex items-center gap-1.5">
-            <Shield className="h-3.5 w-3.5 text-signal shrink-0" />
-            <span>Read-Only Access</span>
+            <Shield className="h-3.5 w-3.5 text-emerald shrink-0" />
+            <span>Read-Only Statement Access</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Shield className="h-3.5 w-3.5 text-signal shrink-0" />
-            <span>No Login Details Stored</span>
+            <Shield className="h-3.5 w-3.5 text-emerald shrink-0" />
+            <span>Zero Password Storage</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Shield className="h-3.5 w-3.5 text-signal shrink-0" />
+            <Shield className="h-3.5 w-3.5 text-emerald shrink-0" />
             <span>Revoke Consent Anytime</span>
           </div>
         </div>
@@ -384,7 +384,7 @@ export function BankConnectCard({ connections, isLoading, onRefresh }: Props) {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-signal/20 bg-signal/10 text-signal">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-brand">
                     <Building2 className="h-5 w-5" />
                   </div>
                   <div>
@@ -396,7 +396,7 @@ export function BankConnectCard({ connections, isLoading, onRefresh }: Props) {
                 <button
                   onClick={() => setModalOpen(false)}
                   disabled={isConnecting}
-                  className="rounded-lg p-1.5 text-ink-3 hover:bg-white/5 hover:text-ink-1"
+                  className="rounded-lg p-1.5 text-ink-3 hover:bg-surface hover:text-ink-1"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -429,9 +429,9 @@ export function BankConnectCard({ connections, isLoading, onRefresh }: Props) {
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-signal/20 bg-signal/[0.04] p-3 text-xs text-ink-2">
+                <div className="rounded-lg border border-emerald/20 bg-emerald/[0.04] p-3 text-xs text-ink-2">
                   <div className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-signal shrink-0" />
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald shrink-0" />
                     <span>
                       FinMind AI never asks for bank passwords, MPIN, or debit card credentials.
                       Consent is approved securely via your phone OTP.

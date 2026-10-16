@@ -19,7 +19,7 @@ interface Props {
   onLogout: () => void;
 }
 
-/** Status bar: live API heartbeat, session threat pulse, advisor toggle, add button and the user menu. */
+/** Precision Top Navigation Bar with live telemetry, AI Copilot trigger, and user controls. */
 export function TopBar({ title, user, heartbeat, threat, chatOpen, onToggleChat, onAdd, onLogout }: Props) {
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -28,48 +28,101 @@ export function TopBar({ title, user, heartbeat, threat, chatOpen, onToggleChat,
 
   useEffect(() => {
     if (!menu) return;
-    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setMenu(false); };
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setMenu(false);
+    };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [menu]);
 
   return (
-    <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/[0.06] bg-void/70 px-4 py-3 backdrop-blur-xl md:px-6">
-      <h1 className="min-w-0 flex-1 truncate text-lg font-bold tracking-tight md:text-xl">{title}</h1>
-
-      <div className="hidden items-center gap-2 sm:flex">
-        <span title={up ? "API reachable" : heartbeat.status === "checking" ? "Checking API…" : "API unreachable"} className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-card/70 px-3 py-1.5 text-xs">
-          <span className="relative flex h-2 w-2">
-            {up && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gain opacity-60" />}
-            <span className={clsx("relative inline-flex h-2 w-2 rounded-full", up ? "bg-gain" : heartbeat.status === "checking" ? "bg-warn" : "bg-danger")} />
-          </span>
-          <span className="text-ink-2">{up ? "Live" : heartbeat.status === "checking" ? "Connecting" : "Offline"}</span>
-          {up && heartbeat.latencyMs !== null && <span className="num text-ink-4">{heartbeat.latencyMs}ms</span>}
-        </span>
-        <span title={t.description} className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: `${t.hex}44`, background: `${t.hex}12`, color: t.hex }}>
-          <span className="relative flex h-2 w-2">
-            {threat !== "clear" && <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70" style={{ background: t.hex }} />}
-            <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: t.hex }} />
-          </span>
-          {t.label}
-        </span>
+    <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-[#090D15]/90 px-4 backdrop-blur-md md:px-6">
+      <div className="flex flex-1 items-center gap-3 min-w-0">
+        <h1 className="truncate text-base font-bold tracking-tight text-ink-1 md:text-lg">{title}</h1>
       </div>
 
-      <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={onToggleChat} aria-pressed={chatOpen}
-        className={clsx("btn-ghost !px-3 md:!px-4", chatOpen && "!border-signal/40 !bg-signal/10 !text-signal")}>
-        <Sparkles className="h-4 w-4" /><span className="hidden md:inline">AI Advisor</span>
-      </motion.button>
-      <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={onAdd} className="btn-primary !px-3 md:!px-4"><Plus className="h-4 w-4" /><span className="hidden md:inline">Add transaction</span></motion.button>
+      {/* Telemetry Pills */}
+      <div className="hidden items-center gap-2 sm:flex">
+        {/* Heartbeat Status */}
+        <div
+          title={up ? "API connected" : "Connecting..."}
+          className="flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 text-[11px] font-medium"
+        >
+          <span className="relative flex h-1.5 w-1.5">
+            {up && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald opacity-60" />}
+            <span className={clsx("relative inline-flex h-1.5 w-1.5 rounded-full", up ? "bg-emerald" : "bg-warn")} />
+          </span>
+          <span className="text-ink-2">{up ? "API Online" : "Connecting"}</span>
+          {up && heartbeat.latencyMs !== null && <span className="num text-ink-4 text-[10px]">{heartbeat.latencyMs}ms</span>}
+        </div>
 
-      <div ref={ref} className="relative">
-        <button onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu} aria-label="Account menu"
-          className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-signal to-indigo-500 text-sm font-bold text-void">{user.username.slice(0, 1).toUpperCase()}</button>
+        {/* Security Threat Level */}
+        <div
+          title={t.description}
+          className="flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold"
+          style={{ borderColor: `${t.hex}33`, color: t.hex }}
+        >
+          <span className="h-1.5 w-1.5 rounded-full" style={{ background: t.hex }} />
+          <span>{t.label}</span>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onToggleChat}
+          aria-pressed={chatOpen}
+          className={clsx(
+            "btn-secondary text-xs",
+            chatOpen && "!border-brand !bg-brand/10 !text-brand"
+          )}
+        >
+          <Sparkles className="h-3.5 w-3.5 text-brand" />
+          <span className="hidden sm:inline">AI Advisor</span>
+        </button>
+
+        <button onClick={onAdd} className="btn-primary text-xs">
+          <Plus className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Add Transaction</span>
+        </button>
+      </div>
+
+      {/* User Avatar Menu */}
+      <div ref={ref} className="relative ml-1">
+        <button
+          onClick={() => setMenu((m) => !m)}
+          aria-haspopup="menu"
+          aria-expanded={menu}
+          aria-label="Account menu"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-xs font-bold text-ink-1 transition-colors hover:border-border-strong hover:bg-elevated"
+        >
+          {user.username.slice(0, 1).toUpperCase()}
+        </button>
+
         <AnimatePresence>
           {menu && (
-            <motion.div role="menu" initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={spring}
-              className="glass-elevated absolute right-0 mt-2 w-60 p-2">
-              <div className="px-3 py-2"><p className="truncate text-sm font-semibold">{user.username}</p><p className="truncate text-xs text-ink-3">{user.email}</p></div>
-              <button role="menuitem" onClick={onLogout} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-2 hover:bg-white/5 hover:text-danger"><LogOut className="h-4 w-4" /> Log out</button>
+            <motion.div
+              role="menu"
+              initial={{ opacity: 0, y: -4, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.98 }}
+              transition={spring}
+              className="glass-elevated absolute right-0 mt-2 w-56 p-1.5"
+            >
+              <div className="border-b border-border px-2.5 py-2">
+                <p className="truncate text-xs font-semibold text-ink-1">{user.username}</p>
+                <p className="truncate text-[11px] text-ink-3">{user.email}</p>
+              </div>
+              <div className="pt-1">
+                <button
+                  role="menuitem"
+                  onClick={onLogout}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-ink-2 transition-colors hover:bg-danger/10 hover:text-danger"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Log out</span>
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
