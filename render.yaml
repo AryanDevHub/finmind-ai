@@ -3,8 +3,9 @@ services:
   - type: web
     name: finmind-ai-backend
     runtime: python
-    buildCommand: pip install -r requirements.txt && python setup_db.py
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port 10000
+    buildCommand: pip install --no-cache-dir torch==2.5.1+cpu --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir -r requirements.txt
+    preDeployCommand: alembic upgrade head || true
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: GROQ_API_KEY
         sync: false
@@ -15,12 +16,25 @@ services:
           name: finmind-db
           property: connectionString
 
-  # ── Frontend — Streamlit ──────────────────────────────────────
+  # ── Web Frontend — Modern Swiss Minimalist UI (Vite) ──────────
+  - type: static
+    name: finmind-ai-web
+    buildCommand: cd web && npm install && npm run build
+    staticPublishPath: web/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://finmind-ai-backend.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  # ── Legacy Frontend — Streamlit ───────────────────────────────
   - type: web
     name: finmind-ai-frontend
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run frontend/app.py --server.port 10000 --server.address 0.0.0.0 --server.headless true
+    buildCommand: pip install --no-cache-dir -r requirements-frontend.txt
+    startCommand: streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
     envVars:
       - key: API_URL
         value: https://finmind-ai-backend.onrender.com

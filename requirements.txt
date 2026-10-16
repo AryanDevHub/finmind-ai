@@ -1,4 +1,6 @@
-# Convenience for hosts that expect a single file (e.g. Render native Python runtime)
+# Host requirements (CPU-optimised for fast cloud deployments such as Render)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu; sys_platform == 'linux'
+torch; sys_platform != 'linux'
 -r requirements-backend.txt
--r requirements-frontend.txt
 cryptography
