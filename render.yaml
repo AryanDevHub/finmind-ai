@@ -7,6 +7,8 @@ services:
     preDeployCommand: alembic upgrade head || true
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: GROQ_API_KEY
         sync: false
       - key: SECRET_KEY
@@ -36,6 +38,8 @@ services:
     buildCommand: pip install --no-cache-dir -r requirements-frontend.txt
     startCommand: streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: API_URL
         value: https://finmind-ai-backend.onrender.com
 
