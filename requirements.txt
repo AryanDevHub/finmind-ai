@@ -1,3 +1,4 @@
 # Convenience for hosts that expect a single file (e.g. Render native Python runtime)
 -r requirements-backend.txt
 -r requirements-frontend.txt
+cryptography
