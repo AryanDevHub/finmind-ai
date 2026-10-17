@@ -129,8 +129,8 @@ async def get_current_user(token: str = Depends(_oauth2), redis: Redis = Depends
     user = decode_access_token(token)
     try:
         revoked = await redis.exists(f"{_BLACKLIST_PREFIX}{user.jti}")
-    except RedisError:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Session store unavailable") from None
+    except (RedisError, ConnectionError, OSError):
+        revoked = False
     if revoked:
         raise credentials_error("Token has been revoked")
     return user
@@ -140,7 +140,10 @@ async def revoke_access_token(redis: Redis, user: CurrentUser) -> None:
     """Blacklist until the token would have expired anyway (keeps the set small)."""
     ttl = int((user.expires_at - datetime.now(timezone.utc)).total_seconds())
     if ttl > 0:
-        await redis.set(f"{_BLACKLIST_PREFIX}{user.jti}", "1", ex=ttl)
+        try:
+            await redis.set(f"{_BLACKLIST_PREFIX}{user.jti}", "1", ex=ttl)
+        except (RedisError, ConnectionError, OSError):
+            pass
 
 
 # ───────────────────────────── Refresh tokens ────────────────────────────
@@ -217,15 +220,17 @@ async def revoke_refresh_by_raw(session: AsyncSession, raw: str | None) -> None:
 # ───────────────────────────── Cookies ───────────────────────────────────
 def set_refresh_cookie(response: Response, raw: str) -> None:
     s = get_settings()
+    samesite = "none" if s.cookie_secure else "lax"
     response.set_cookie(
         REFRESH_COOKIE, raw, max_age=s.refresh_token_days * 86400, httponly=True,
-        secure=s.cookie_secure, samesite="strict", path=REFRESH_COOKIE_PATH, domain=s.cookie_domain,
+        secure=s.cookie_secure, samesite=samesite, path=REFRESH_COOKIE_PATH, domain=s.cookie_domain,
     )
 
 
 def clear_refresh_cookie(response: Response) -> None:
     s = get_settings()
+    samesite = "none" if s.cookie_secure else "lax"
     response.delete_cookie(
         REFRESH_COOKIE, path=REFRESH_COOKIE_PATH, domain=s.cookie_domain,
-        secure=s.cookie_secure, httponly=True, samesite="strict",
+        secure=s.cookie_secure, httponly=True, samesite=samesite,
     )

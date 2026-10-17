@@ -281,8 +281,8 @@ async def logout(
             await auth.revoke_access_token(redis, auth.decode_access_token(token))
         except HTTPException:
             pass  # expired or malformed: nothing left to revoke
-        except RedisError:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Session store unavailable") from None
+        except (RedisError, ConnectionError, OSError):
+            pass  # session store unavailable: refresh family revocation in Postgres handles it
     await auth.revoke_refresh_by_raw(session, refresh_token)
     await session.commit()
     auth.clear_refresh_cookie(response)
