@@ -15,10 +15,17 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, AsyncIterator
+
+# Ensure immediate line-buffered logging for cloud environments (Render)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(line_buffering=True)
 
 from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,21 +64,36 @@ MonthQuery = Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")]
 # ───────────────────────────── App / lifespan ────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings = get_settings()  # fail fast on bad config
-    redis = Redis.from_url(settings.redis_url, decode_responses=True, health_check_interval=30)
-    app.state.redis = redis
-    app.state.velocity = VelocityStore(redis)
-    app.state.scorer = FraudScorer(settings.model_dir)
-    app.state.tz = settings.tz
-    app.state.llm = GroqLLM(settings.groq_api_key, settings.llm_model) if settings.groq_api_key else None
-    if app.state.llm is None:
-        log.warning("GROQ_API_KEY not set: /chat will return 503")
-    log.info("startup complete (model %s)", app.state.scorer.model_version)
+    try:
+        settings = get_settings()
+        redis = Redis.from_url(settings.redis_url, decode_responses=True, health_check_interval=30)
+        app.state.redis = redis
+        app.state.velocity = VelocityStore(redis)
+        app.state.scorer = FraudScorer(settings.model_dir)
+        app.state.tz = settings.tz
+        app.state.llm = GroqLLM(settings.groq_api_key, settings.llm_model) if settings.groq_api_key else None
+        if app.state.llm is None:
+            log.warning("GROQ_API_KEY not set: /chat will return 503")
+        scorer_ver = getattr(app.state.scorer, "model_version", "unknown")
+        log.info("FinMind API startup complete (model %s)", scorer_ver)
+        print(f"FinMind API startup complete (model {scorer_ver})", flush=True)
+    except Exception as e:
+        import traceback
+        print(f"FATAL ERROR DURING APP LIFESPAN: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        raise
     try:
         yield
     finally:
-        await redis.aclose()
-        await dispose_engine()
+        try:
+            await redis.aclose()
+        except Exception:
+            pass
+        try:
+            await dispose_engine()
+        except Exception:
+            pass
 
 
 _settings = get_settings()

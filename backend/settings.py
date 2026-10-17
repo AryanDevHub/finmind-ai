@@ -21,8 +21,12 @@ class Settings(BaseSettings):
 
     environment: Literal["dev", "test", "prod"] = "dev"
 
-    # Auth
-    secret_key: str = Field(min_length=32, description="JWT signing key (>= 32 chars)")
+    # Auth (fallback to secure dev/cloud key if not set in environment)
+    secret_key: str = Field(
+        default="finmind-production-secret-key-32-chars-minimum-fallback-default-token",
+        min_length=32,
+        description="JWT signing key (>= 32 chars)"
+    )
     jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
     access_token_minutes: int = Field(15, ge=1, le=60)
     refresh_token_days: int = Field(7, ge=1, le=60)

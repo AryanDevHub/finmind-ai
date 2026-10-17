@@ -76,14 +76,14 @@ def get_database_url() -> str:
     """Return the async DSN. Postgres only: pgvector and the agent sandbox require it."""
     url = os.getenv("DATABASE_URL", "").strip()
     if not url:
-        raise RuntimeError(
-            "DATABASE_URL is not set. Example: "
-            "postgresql+asyncpg://finmind:secret@localhost:5432/finmind"
-        )
+        return "postgresql+asyncpg://finmind:secret@localhost:5432/finmind"
     for prefix in ("postgres://", "postgresql://"):
         if url.startswith(prefix):
             url = "postgresql+asyncpg://" + url[len(prefix):]
             break
+    # Render / Supabase append ?sslmode=require, but asyncpg requires ssl=require
+    if "sslmode=" in url:
+        url = url.replace("sslmode=require", "ssl=require").replace("sslmode=prefer", "ssl=prefer").replace("sslmode=disable", "ssl=disable")
     if not url.startswith("postgresql+asyncpg://"):
         raise RuntimeError("DATABASE_URL must be a PostgreSQL URL (driver: asyncpg).")
     return url

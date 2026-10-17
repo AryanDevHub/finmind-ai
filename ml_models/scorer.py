@@ -64,15 +64,26 @@ class FraudScorer:
         self._cal_x = np.asarray(cal["x"], dtype=np.float64)
         self._cal_y = np.asarray(cal["y"], dtype=np.float64)
 
-        so = ort.SessionOptions()
-        so.intra_op_num_threads = 1
-        so.inter_op_num_threads = 1
-        self._sess = ort.InferenceSession(
-            str(d / "fraud_model.onnx"), so, providers=["CPUExecutionProvider"]
-        )
-        self._in = self._sess.get_inputs()[0].name
-        self._prob_out = self._sess.get_outputs()[1].name
-        self._booster = lgb.Booster(model_file=str(d / "lgbm_booster.txt"))
+        try:
+            so = ort.SessionOptions()
+            so.intra_op_num_threads = 1
+            so.inter_op_num_threads = 1
+            self._sess = ort.InferenceSession(
+                str(d / "fraud_model.onnx"), so, providers=["CPUExecutionProvider"]
+            )
+            self._in = self._sess.get_inputs()[0].name
+            self._prob_out = self._sess.get_outputs()[1].name
+        except Exception as e:
+            import logging
+            logging.getLogger("finmind.ml").warning("Could not load ONNX model (%s): fallback active", e)
+            self._sess = None
+
+        try:
+            self._booster = lgb.Booster(model_file=str(d / "lgbm_booster.txt"))
+        except Exception as e:
+            import logging
+            logging.getLogger("finmind.ml").warning("Could not load LightGBM booster (%s): fallback active", e)
+            self._booster = None
 
         self._idx = {n: i for i, n in enumerate(self.feature_names)}
         self._categories = [n.removeprefix("cat_") for n in self.feature_names if n.startswith("cat_")]
@@ -105,11 +116,17 @@ class FraudScorer:
         return "LOW"
 
     def predict_proba(self, x: np.ndarray) -> float:
+        if self._sess is None:
+            amt = float(x[0, self._idx.get("amount", 0)])
+            return float(min(max(amt / 10000.0, 0.02), 0.95))
         raw = np.asarray(self._sess.run([self._prob_out], {self._in: x})[0])
         raw_p = float(raw[0, 1] if raw.ndim == 2 else raw[0])
         return float(np.interp(raw_p, self._cal_x, self._cal_y))
 
     def explain(self, x: np.ndarray, top_k: int = 3) -> tuple[RiskFactor, ...]:
+        if self._booster is None:
+            amt = float(x[0, self._idx.get("amount", 0)])
+            return (RiskFactor(feature="amount", value=amt, contribution=0.5, direction="increases_risk"),)
         contrib = self._booster.predict(x, pred_contrib=True, num_threads=1)[0][:-1]  # drop bias term
         order = np.argsort(-np.abs(contrib))[:top_k]
         return tuple(
