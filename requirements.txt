@@ -1,7 +1,7 @@
 # Host requirements (CPU-optimised for fast cloud deployments such as Render)
+# Note: torch 2.5.1+cpu is no longer available; use latest CPU wheel from the whl index.
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.5.1+cpu; sys_platform == 'linux' and python_version == '3.11'
-torch; sys_platform == 'linux' and python_version != '3.11'
+torch; sys_platform == 'linux'
 torch; sys_platform != 'linux'
 -r requirements-backend.txt
 -r requirements-frontend.txt
