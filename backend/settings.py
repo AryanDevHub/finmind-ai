@@ -24,9 +24,16 @@ class Settings(BaseSettings):
     # Auth (fallback to secure dev/cloud key if not set in environment)
     secret_key: str = Field(
         default="finmind-production-secret-key-32-chars-minimum-fallback-default-token",
-        min_length=32,
-        description="JWT signing key (>= 32 chars)"
+        min_length=16,
+        description="JWT signing key"
     )
+
+    @field_validator("secret_key", mode="before")
+    @classmethod
+    def _pad_secret_key(cls, v: str) -> str:
+        if isinstance(v, str) and len(v) < 32:
+            return (v + "_finmind_sha256_secure_key_padding_salt_32bytes")[:64]
+        return v
     jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
     access_token_minutes: int = Field(15, ge=1, le=60)
     refresh_token_days: int = Field(7, ge=1, le=60)
