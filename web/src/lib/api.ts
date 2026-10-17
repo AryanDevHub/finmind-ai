@@ -95,7 +95,7 @@ async function send(path: string, o: RequestOptions): Promise<Response> {
   if (o.auth !== false && accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), o.timeoutMs ?? 20_000);
+  const timer = setTimeout(() => ctrl.abort(), o.timeoutMs ?? 60_000);
   o.signal?.addEventListener("abort", () => ctrl.abort(), { once: true });
   try {
     return await fetch(`${BASE}${path}`, { method: o.method ?? "GET", headers, body, credentials: "include", signal: ctrl.signal });

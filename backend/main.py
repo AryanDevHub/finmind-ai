@@ -111,6 +111,22 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    import traceback
+    traceback.print_exc(file=sys.stderr)
+    origin = request.headers.get("origin") or ""
+    headers: dict[str, str] = {}
+    if origin in _settings.cors_origin_list:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Database / Server Error: {exc}"},
+        headers=headers,
+    )
+
+
 # ───────────────────────────── Helpers ───────────────────────────────────
 _FACTOR_LABELS = {
     "amount": "Transaction amount", "hour": "Hour of day", "day_of_week": "Day of week",
