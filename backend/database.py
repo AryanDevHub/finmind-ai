@@ -97,7 +97,7 @@ def get_engine() -> AsyncEngine:
         max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
         pool_pre_ping=True,
         pool_recycle=1800,
-        connect_args={"timeout": 10, "command_timeout": 30},
+        connect_args={"timeout": 10, "command_timeout": 30, "statement_cache_size": 0},
     )
 
 
